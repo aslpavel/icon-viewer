@@ -10,6 +10,7 @@
         "material",
         "phosphor",
         "remix",
+        "weather",
       ];
       const fonts_shown = Object.fromEntries(fonts.map((name) => [name, true]));
       let icons = {};
@@ -84,7 +85,9 @@
 
           // header
           const section_header = document.createElement("div");
-          section_header.appendChild(icon(icon_fold));
+          section_header.appendChild(
+            icon(fonts_shown[font] ? icon_fold : icon_unfold)
+          );
           section_header.appendChild(
             document.createTextNode(`${font} (${Object.keys(names).length})`)
           );
@@ -172,7 +175,6 @@
                 (acc, item) => acc || item,
                 false
               );
-              console.log(hide);
               for (const name in fonts_shown) {
                 fonts_shown[name] = !hide;
               }

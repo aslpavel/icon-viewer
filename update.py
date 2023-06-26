@@ -187,6 +187,33 @@ def awesome() -> None:
         font_file.write(font)
 
 
+def weather() -> None:
+    font_name = "weather"
+    font = requests.get(
+        "https://github.com/erikflowers/weather-icons/raw/master/font/weathericons-regular-webfont.ttf"
+    ).content
+    metadata = requests.get(
+        "https://github.com/erikflowers/weather-icons/raw/master/css/weather-icons.css"
+    ).text
+
+    names: Dict[str, str] = {}
+    for match in re.finditer(
+        '^\\.wi-([^:]*):.*\n\\s+content:\\s+"\\\\(.*)"',
+        metadata,
+        re.MULTILINE,
+    ):
+        names[match.group(1)] = chr(int(match.group(2), 16))
+    with open(f"{font_name}.json", "w") as meta_file:
+        json.dump(
+            {"family": "Weather Icons", "names": names},
+            meta_file,
+            indent=2,
+        )
+
+    with open(f"{font_name}.ttf", "wb") as font_file:
+        font_file.write(font)
+
+
 def main() -> None:
     material()
     fluent()
@@ -194,6 +221,7 @@ def main() -> None:
     remix()
     codicon()
     awesome()
+    weather()
 
 
 if __name__ == "__main__":
