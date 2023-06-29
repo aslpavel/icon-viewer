@@ -1,140 +1,176 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <script>
-      "use strict";
-      const fonts = [
-        "awesome",
-        "codicon",
-        "fluent",
-        "material",
-        "phosphor",
-        "remix",
-        "weather",
-      ];
-      const fonts_shown = Object.fromEntries(fonts.map((name) => [name, true]));
-      let icons = {};
-      let icon_fold = "material-minus-box-outline";
-      let icon_unfold = "material-plus-box-outline";
+    <script type="module">
+      import { parse as parseFont } from "./modules/opentype.module.js";
+
+      let fonts = {}; // loaded fonts
+      let fontsExpanded = {};
+      const iconFold = "material-minus-box-outline";
+      const iconFoldAll = "material-collapse-all-outline";
+      const iconUnfold = "material-plus-box-outline";
+      const iconUnfoldAll = "material-expand-all-outline";
 
       // load and register fonts and names mappings
-      async function loadFont(name) {
+      async function fontLoad(fontDesc) {
         // load font and metadata
-        const [metadata, font] = await Promise.all([
-          fetch(name + ".json").then((r) => r.json()),
-          fetch(name + ".ttf").then((r) => r.arrayBuffer()),
+        const [metadata, fontData] = await Promise.all([
+          fetch(fontDesc.metadata).then((r) => r.json()),
+          fetch(fontDesc.font).then((r) => r.arrayBuffer()),
         ]);
 
         // register font
-        document.fonts.add(new FontFace(name, font));
+        document.fonts.add(new FontFace(fontDesc.name, fontData));
 
         // create style
         const style = document.createElement("style");
         style.type = "text/css";
-        style.innerText = `.${name} { font-family: "${name}"}`;
+        style.innerText = `.${fontDesc.name} {font-family: "${fontDesc.name}"}`;
         document.getElementsByTagName("head")[0].appendChild(style);
 
-        return [name, metadata.names];
+        const font = parseFont(fontData);
+        return [fontDesc.name, { font, names: metadata.names }];
       }
 
-      function icon(name_full) {
-        const div = document.createElement("div");
-        const match = name_full.match(/(?<font>[^-]*)-(?<name>.*)/);
+      function iconResolve(iconFullName) {
+        const match = iconFullName.match(
+          /(?<fontFamily>[^-]*)-(?<iconName>.*)/
+        );
         if (!match) {
-          return div;
+          return null;
         }
-        const { font, name } = match.groups;
-        const names = icons[font];
-        if (!names) {
-          return div;
+        const { fontFamily, iconName } = match.groups;
+        const font = fonts[fontFamily];
+        if (!font) {
+          return null;
         }
-        const content = names[name];
-        if (!content) {
-          return div;
+        const codepoint = font.names[iconName];
+        if (!codepoint) {
+          return null;
         }
-        div.textContent = content;
-        div.style.fontFamily = font;
-        div.classList.add("icon");
-        return div;
+        const content = String.fromCodePoint(codepoint);
+        return {
+          fontFamily,
+          name: iconName,
+          codepoint,
+          content,
+          font: font.font,
+          get glyph() {
+            return this.font.charToGlyph(content);
+          },
+          toSVG() {
+            const glyph = this.glyph,
+              head = this.font.tables.head,
+              padding = head.unitsPerEm / 10,
+              width = head.xMax - head.xMin + 2 * padding,
+              height = head.yMax - head.yMin + 2 * padding,
+              baseline = head.yMax + padding,
+              sideEm = Math.max(width, height);
+            const side = 128,
+              scale = side / sideEm,
+              size = head.unitsPerEm * scale,
+              x = ((sideEm - glyph.advanceWidth) / 2) * scale,
+              y = baseline * scale;
+
+            const svg = [
+              '<?xml version="1.0"?>',
+              `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${side} ${side}">`,
+              `  ${this.glyph.getPath(x, y, size).toSVG()}`,
+              "</svg>",
+            ].join("\n");
+
+            return svg;
+          },
+          toElement() {
+            const div = document.createElement("div");
+            div.textContent = this.content;
+            div.style.fontFamily = this.fontFamily;
+            div.classList.add("icon");
+            return div;
+          },
+        };
       }
 
       // given list of {font: {name: content}} select names containing selector
-      function select(icons, selector) {
+      function iconsSelect(fonts, selector) {
         if (selector.length == 0) {
-          return icons;
+          return fonts;
         }
         const regex = new RegExp(selector);
-        const selected = Object.entries(icons)
-          .map(([font, names]) => {
-            const names_selected = Object.entries(names).filter(
-              ([name, content]) => name.search(regex) >= 0
+        const selected = Object.entries(fonts)
+          .map(([fontName, font]) => {
+            const names = Object.fromEntries(
+              Object.entries(font.names).filter(
+                ([name, content]) => name.search(regex) >= 0
+              )
             );
-            return [font, Object.fromEntries(names_selected)];
+            return [fontName, { ...font, names }];
           })
-          .filter(([font, names]) => Object.keys(names).length > 0);
+          .filter(([fontName, font]) => Object.keys(font.names).length > 0);
         return Object.fromEntries(selected);
       }
 
-      function render_icons(icons) {
+      function iconsRender(icons) {
         const sections = document.createElement("div");
-        Object.entries(icons).forEach(([font, names]) => {
+        Object.entries(icons).forEach(([fontName, font]) => {
           // section
           const section = document.createElement("div");
           section.classList.add("section");
           sections.appendChild(section);
 
           // header
-          const section_header = document.createElement("div");
-          section_header.appendChild(
-            icon(fonts_shown[font] ? icon_fold : icon_unfold)
+          const sectionHeader = document.createElement("div");
+          sectionHeader.appendChild(
+            iconResolve(
+              fontsExpanded[fontName] ? iconFold : iconUnfold
+            )?.toElement()
           );
-          section_header.appendChild(
-            document.createTextNode(`${font} (${Object.keys(names).length})`)
+          sectionHeader.appendChild(
+            document.createTextNode(
+              `${fontName} (${Object.keys(font.names).length})`
+            )
           );
-          section_header.classList.add("section-header");
-          section_header.addEventListener("click", (event) => {
-            if (fonts_shown[font]) {
-              fonts_shown[font] = false;
-              section_icons.style.display = "none";
-              section_header.replaceChild(
-                icon(icon_unfold),
-                section_header.firstChild
+          sectionHeader.classList.add("section-header");
+          sectionHeader.addEventListener("click", (event) => {
+            if (fontsExpanded[fontName]) {
+              fontsExpanded[fontName] = false;
+              sectionIcons.style.display = "none";
+              sectionHeader.replaceChild(
+                iconResolve(iconUnfold)?.toElement(),
+                sectionHeader.firstChild
               );
             } else {
-              fonts_shown[font] = true;
-              section_icons.style.display = "";
-              section_header.replaceChild(
-                icon(icon_fold),
-                section_header.firstChild
+              fontsExpanded[fontName] = true;
+              sectionIcons.style.display = "";
+              sectionHeader.replaceChild(
+                iconResolve(iconFold)?.toElement(),
+                sectionHeader.firstChild
               );
             }
           });
-          section.appendChild(section_header);
+          section.appendChild(sectionHeader);
 
           // icons
-          const description = document.getElementById("description");
-          const section_icons = document.createElement("div");
-          section_icons.classList.add("section-icons");
-          section_icons.classList.add(font);
-          section_icons.style.display = fonts_shown[font] ? "" : "none";
-          Object.entries(names).forEach(([name, content]) => {
+          const headerIconName = document.getElementById("header-icon-name");
+          const sectionIcons = document.createElement("div");
+          sectionIcons.classList.add("section-icons");
+          sectionIcons.classList.add(fontName);
+          sectionIcons.style.display = fontsExpanded[fontName] ? "" : "none";
+          Object.entries(font.names).forEach(([name, codepoint]) => {
             const icon = document.createElement("div");
-            icon.textContent = content;
-            icon.dataset.name = name;
-            icon.addEventListener("click", (event) => {
-              navigator.clipboard.writeText(
-                `${font}-${event.target.dataset.name}`
-              );
-            });
+            const iconName = `${fontName}-${name}`;
+            icon.textContent = String.fromCodePoint(codepoint);
+            icon.dataset.name = iconName;
+            icon.addEventListener("click", () => previewShow(iconName));
             icon.addEventListener("mouseover", (event) => {
-              description.innerText = event.target.dataset.name;
+              headerIconName.innerText = event.target.dataset.name;
             });
             icon.addEventListener("mouseleave", (event) => {
-              description.innerText = "";
+              headerIconName.innerText = "";
             });
-            section_icons.appendChild(icon);
+            sectionIcons.appendChild(icon);
           });
-          section.appendChild(section_icons);
+          section.appendChild(sectionIcons);
         });
         return sections;
       }
@@ -149,43 +185,91 @@
         };
       }
 
-      window.addEventListener("load", (event) => {
-        Promise.all(fonts.map(loadFont))
-          .then(Object.fromEntries)
-          .then((sources) => {
-            icons = sources;
+      function previewShow(iconName) {
+        const icon = iconResolve(iconName);
+        const previewSVG = document.getElementById("preview-svg");
+        previewSVG.innerHTML = icon.toSVG();
 
-            // update shown icons
-            const result = document.getElementById("result");
-            const result_update = () => {
-              result.replaceChildren(
-                render_icons(select(sources, selector.value))
-              );
-            };
+        const previewName = document.getElementById("preview-name");
+        previewName.textContent = iconName;
 
-            // selector
-            const selector = document.getElementById("selector");
-            selector.addEventListener("input", debounce(result_update));
+        const previewCopyName = document.getElementById("preview-copy-name");
+        previewCopyName.dataset.name = iconName;
 
-            // expand/collapse
-            const collapse = document.getElementById("collapse");
-            collapse.appendChild(icon("codicon-collapse-all"));
-            collapse.addEventListener("click", () => {
-              const hide = Object.values(fonts_shown).reduce(
-                (acc, item) => acc || item,
-                false
-              );
-              for (const name in fonts_shown) {
-                fonts_shown[name] = !hide;
-              }
-              collapse.replaceChildren(
-                icon(hide ? "codicon-expand-all" : "codicon-collapse-all")
-              );
-              result_update();
-            });
+        const previewDialog = document.getElementById("preview-dialog");
+        previewDialog.dataset.name = iconName;
+        previewDialog.showModal();
+      }
 
-            result_update();
-          });
+      function main(fonts) {
+        // preview dialog
+        const previewDialog = document.getElementById("preview-dialog");
+        const previewClose = document.getElementById("preview-close");
+        previewClose.replaceChildren(
+          iconResolve("material-close-circle-outline").toElement()
+        );
+        previewClose.addEventListener("click", () => {
+          previewDialog.close();
+        });
+        const previewCopyName = document.getElementById("preview-copy-name");
+        previewCopyName.replaceChildren(
+          iconResolve("material-clipboard-outline").toElement()
+        );
+        previewCopyName.addEventListener("click", () => {
+          navigator.clipboard.writeText(previewDialog.dataset.name);
+        });
+        const previewCopySVG = document.getElementById("preview-copy-svg");
+        previewCopySVG.replaceChildren(
+          iconResolve("material-vector-curve").toElement()
+        );
+        previewCopySVG.addEventListener("click", () => {
+          let icon = iconResolve(previewDialog.dataset.name);
+          navigator.clipboard.writeText(icon.toSVG());
+        });
+
+        // update shown icons
+        const result = document.getElementById("result");
+        const resultUpdate = () => {
+          result.replaceChildren(
+            iconsRender(iconsSelect(fonts, selector.value))
+          );
+        };
+
+        // selector
+        const selector = document.getElementById("header-search-input");
+        selector.addEventListener("input", debounce(resultUpdate));
+
+        // expand/collapse
+        const collapse = document.getElementById("collapse");
+        collapse.appendChild(iconResolve(iconFoldAll)?.toElement());
+        collapse.addEventListener("click", () => {
+          const hide = Object.values(fontsExpanded).reduce(
+            (acc, item) => acc || item,
+            false
+          );
+          for (const name in fontsExpanded) {
+            fontsExpanded[name] = !hide;
+          }
+          collapse.replaceChildren(
+            iconResolve(hide ? iconUnfoldAll : iconFoldAll)?.toElement()
+          );
+          resultUpdate();
+        });
+
+        resultUpdate();
+      }
+
+      window.addEventListener("load", async (event) => {
+        const fontDescsRequest = await fetch("descriptions.json");
+        const fontDescs = await fontDescsRequest.json();
+        const sources = Object.fromEntries(
+          await Promise.all(fontDescs.map(fontLoad))
+        );
+        fonts = sources;
+        fontsExpanded = Object.fromEntries(
+          Object.keys(sources).map((name) => [name, true])
+        );
+        main(fonts);
       });
     </script>
     <style type="text/css">
@@ -235,14 +319,14 @@
         --header-height: 2em;
 
         scrollbar-color: var(--bg_4) var(--fg);
-      }
-      body {
         font-family: "IBM Plex Sans", sans;
-        background-color: var(--fg-1);
-        margin: 0px;
       }
       ::selection {
         background-color: var(--fg-bold);
+      }
+      body {
+        background-color: var(--fg-1);
+        margin: 0px;
       }
 
       .icon {
@@ -263,32 +347,84 @@
         border-bottom-style: solid;
         border-bottom-width: 1px;
         border-color: var(--bg_4);
+        box-shadow: 0 0 0.4em rgb(0 0 0 / 0.3);
         padding: 0.3rem;
         display: flex;
         justify-content: space-between;
         height: calc(var(--header-height) - 0.5rem);
       }
-      #search {
+      #header-search {
         display: flex;
         align-items: center;
         background-color: var(--fg);
         border-color: var(--bg_4);
         border-style: solid;
-        border-radius: 0.5rem;
+        border-radius: 0.3rem;
         border-width: 1px;
         margin-right: 1rem;
       }
-      #selector {
+      #header-search-input {
         background-color: var(--fg);
         border-style: none;
         outline: none;
         margin-left: 0.3rem;
         margin-right: 0.3rem;
       }
-      #description {
-        display: inline;
-        color: var(--bg_2);
-        margin-right: 1rem;
+
+      #preview-dialog {
+        padding: 0;
+        background-color: var(--fg-1);
+        border-radius: 0.3rem;
+        border-width: 1px;
+        border-color: var(--bg_4);
+        width: 60%;
+        height: 60%;
+      }
+      #preview-dialog[open] {
+        display: flex;
+      }
+      #preview-dialog::backdrop {
+        background-color: rgb(0 0 0 / 0.3);
+      }
+      #preview-content {
+        flex: 1;
+
+        display: flex;
+        flex-direction: column;
+      }
+      #preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+
+        padding: 0.5rem;
+
+        background-color: var(--fg_1);
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        border-color: var(--bg_4);
+      }
+      #preview-svg {
+        flex: 1;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+      }
+      #preview-svg > svg {
+        width: min(45vh, 45vw);
+        height: min(45vh, 45vw);
+
+        border-style: solid;
+        border-color: var(--fg_1);
+        border-radius: 0.3rem;
+        border-width: 1px;
+
+        background-color: var(--fg);
+
+        fill: var(--purple);
+        stroke: var(--purple-dark);
+        stroke-width: 1px;
       }
 
       #result {
@@ -299,7 +435,12 @@
       }
       .section-header {
         background-color: var(--fg);
+
         border-radius: 0.3rem;
+        border-style: solid;
+        border-width: 1px;
+        border-color: var(--bg_4);
+
         padding: 0.3rem;
         margin-top: 0.3rem;
         margin-bottom: 0.3rem;
@@ -331,16 +472,52 @@
       .section-icons > div:active {
         background-color: var(--fg_1);
       }
+      .icon-name {
+        display: inline;
+        color: var(--bg_2);
+        margin-right: 1rem;
+        margin-left: 0.5rem;
+      }
+
+      .button {
+        background-color: var(--fg);
+        outline: none;
+        border-radius: 0.3em;
+        border-style: solid;
+        border-width: 1px;
+        border-color: var(--bg_4);
+        transition: all 200ms;
+        font-size: 1.1em;
+      }
+      .button:hover {
+        background-color: var(--fg-1);
+      }
+      .button:active {
+        background-color: var(--purple-light);
+      }
     </style>
   </head>
   <body>
     <div id="header">
-      <div id="search">
-        <input id="selector" />
+      <div id="header-search">
+        <input id="header-search-input" />
         <div id="collapse"></div>
       </div>
-      <div id="description"></div>
+      <div class="icon-name" id="header-icon-name"></div>
     </div>
-    <div id="result" />
+    <dialog id="preview-dialog">
+      <div id="preview-content">
+        <div id="preview-header">
+          <div class="icon-name" id="preview-name">icon-name</div>
+          <div>
+            <button class="button" id="preview-copy-svg">Copy SVG</button>
+            <button class="button" id="preview-copy-name">Copy Name</button>
+            <button class="button" id="preview-close">Close</button>
+          </div>
+        </div>
+        <div id="preview-svg"></div>
+      </div>
+    </dialog>
+    <div id="result"></div>
   </body>
 </html>

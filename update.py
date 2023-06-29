@@ -4,11 +4,17 @@ from __future__ import annotations
 import json
 import re
 import requests
-from typing import Dict
+from typing import Dict, NamedTuple
 
 
-def material() -> None:
-    font_name = "material"
+class Desc(NamedTuple):
+    name: str
+    metadata: str
+    font: str
+
+
+def material() -> Desc:
+    desc = Desc("material", "material.json", "material.ttf")
     metadata = requests.get(
         "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/meta.json"
     ).json()
@@ -16,12 +22,12 @@ def material() -> None:
         "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     ).content
 
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for meta in metadata:
         name = meta["name"]
-        codepoint = chr(int(meta["codepoint"], 16))
+        codepoint = int(meta["codepoint"], 16)
         names[name] = codepoint
-    with open(f"{font_name}.json", "w") as meta_file:
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {
                 "family": "Material Design Icons",
@@ -31,12 +37,14 @@ def material() -> None:
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def fluent() -> None:
-    font_name = "fluent"
+
+def fluent() -> Desc:
+    desc = Desc("fluent", "fluent.json", "fluent.ttf")
     metadata = requests.get(
         "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.json"
     ).json()
@@ -44,7 +52,7 @@ def fluent() -> None:
         "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.ttf"
     ).content
 
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     re_name = re.compile("ic_fluent_(.+)_20_(filled|regular)")
     for name, codepoint in metadata.items():
         match_name = re_name.match(name)
@@ -55,8 +63,8 @@ def fluent() -> None:
         suffix = match_name.group(2)
         if suffix != "regular":
             name = f"{name}-{suffix}"
-        names[name] = chr(codepoint)
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[name] = codepoint
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {
                 "family": "FluentSystemIcons-Resizable",
@@ -66,12 +74,14 @@ def fluent() -> None:
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def phosphor() -> None:
-    font_name = "phosphor"
+
+def phosphor() -> Desc:
+    desc = Desc("phosphor", "phosphor.json", "phosphor.ttf")
     metadata = requests.get(
         "https://github.com/phosphor-icons/web/raw/master/src/regular/style.css"
     ).text
@@ -79,26 +89,28 @@ def phosphor() -> None:
         "https://github.com/phosphor-icons/web/raw/master/src/regular/Phosphor.ttf"
     ).content
 
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for match in re.finditer(
         '^\\.ph\\.ph-([^:]*):.*\n\\s+content:\\s+"\\\\(.*)"',
         metadata,
         re.MULTILINE,
     ):
-        names[match.group(1)] = chr(int(match.group(2), 16))
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[match.group(1)] = int(match.group(2), 16)
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {"family": "Phosphor", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def remix() -> None:
-    font_name = "remix"
+
+def remix() -> Desc:
+    desc = Desc("remix", "remix.json", "remix.ttf")
     metadata = requests.get(
         "https://github.com/Remix-Design/RemixIcon/raw/master/fonts/remixicon.css"
     ).text
@@ -107,7 +119,7 @@ def remix() -> None:
     ).content
 
     # .ri-arrow-left-right-fill:before { content: "\ea61"; }
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for match in re.finditer(
         '^\\.ri-([^:]+)-(fill|line):.*{\\s+content:\\s+"\\\\(.*)"',
         metadata,
@@ -117,20 +129,22 @@ def remix() -> None:
         suffix = match.group(2)
         if suffix != "line":
             name = f"{name}-{suffix}"
-        names[name] = chr(int(match.group(3), 16))
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[name] = int(match.group(3), 16)
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {"family": "remixicon", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def codicon() -> None:
-    font_name = "codicon"
+
+def codicon() -> Desc:
+    desc = Desc("codicon", "codicon.json", "codicon.ttf")
     metadata = requests.get(
         "https://github.com/microsoft/vscode-codicons/raw/main/dist/codicon.css"
     ).text
@@ -139,26 +153,28 @@ def codicon() -> None:
     ).content
 
     # .codicon-gist-new:before { content: "\ea60" }
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for match in re.finditer(
         '^\\.codicon-([^:]+):.*{\\s+content:\\s+"\\\\(.*)"',
         metadata,
         re.MULTILINE,
     ):
-        names[match.group(1)] = chr(int(match.group(2), 16))
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[match.group(1)] = int(match.group(2), 16)
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {"family": "codicon", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def awesome() -> None:
-    font_name = "awesome"
+
+def awesome() -> Desc:
+    desc = Desc("awesome", "awesome.json", "awesome.ttf")
     # inspect https://fontawesome.com to get this URLs
     version = "6.4.0"
     font = requests.get(
@@ -169,26 +185,28 @@ def awesome() -> None:
     ).text
 
     # single line like .fa-fill-drip:before{content:"\f576"}
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for match in re.finditer(
         '\\.fa-([^:{}\\.]+):before{\\s*content:\\s*"\\\\([^"]+)"[^}]*}',
         metadata,
         re.MULTILINE,
     ):
-        names[match.group(1)] = chr(int(match.group(2), 16))
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[match.group(1)] = int(match.group(2), 16)
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {"family": "Font Awesome 6 Pro", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
 
+    return desc
 
-def weather() -> None:
-    font_name = "weather"
+
+def weather() -> Desc:
+    desc = Desc("weather", "weather.json", "weather.ttf")
     font = requests.get(
         "https://github.com/erikflowers/weather-icons/raw/master/font/weathericons-regular-webfont.ttf"
     ).content
@@ -196,32 +214,41 @@ def weather() -> None:
         "https://github.com/erikflowers/weather-icons/raw/master/css/weather-icons.css"
     ).text
 
-    names: Dict[str, str] = {}
+    names: Dict[str, int] = {}
     for match in re.finditer(
         '^\\.wi-([^:]*):.*\n\\s+content:\\s+"\\\\(.*)"',
         metadata,
         re.MULTILINE,
     ):
-        names[match.group(1)] = chr(int(match.group(2), 16))
-    with open(f"{font_name}.json", "w") as meta_file:
+        names[match.group(1)] = int(match.group(2), 16)
+    with open(desc.metadata, "w") as meta_file:
         json.dump(
             {"family": "Weather Icons", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(f"{font_name}.ttf", "wb") as font_file:
+    with open(desc.font, "wb") as font_file:
         font_file.write(font)
+
+    return desc
 
 
 def main() -> None:
-    material()
-    fluent()
-    phosphor()
-    remix()
-    codicon()
-    awesome()
-    weather()
+    descriptions = [
+        desc._asdict()
+        for desc in [
+            material(),
+            fluent(),
+            phosphor(),
+            remix(),
+            codicon(),
+            awesome(),
+            weather(),
+        ]
+    ]
+    with open("descriptions.json", "w") as all_file:
+        json.dump(descriptions, all_file, indent=2)
 
 
 if __name__ == "__main__":

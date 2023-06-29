@@ -1,0 +1,37 @@
+[
+  {
+    "name": "material",
+    "metadata": "material.json",
+    "font": "material.ttf"
+  },
+  {
+    "name": "fluent",
+    "metadata": "fluent.json",
+    "font": "fluent.ttf"
+  },
+  {
+    "name": "phosphor",
+    "metadata": "phosphor.json",
+    "font": "phosphor.ttf"
+  },
+  {
+    "name": "remix",
+    "metadata": "remix.json",
+    "font": "remix.ttf"
+  },
+  {
+    "name": "codicon",
+    "metadata": "codicon.json",
+    "font": "codicon.ttf"
+  },
+  {
+    "name": "awesome",
+    "metadata": "awesome.json",
+    "font": "awesome.ttf"
+  },
+  {
+    "name": "weather",
+    "metadata": "weather.json",
+    "font": "weather.ttf"
+  }
+]
