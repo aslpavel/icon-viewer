@@ -85,7 +85,7 @@
             const div = document.createElement("div");
             div.textContent = this.content;
             div.style.fontFamily = this.fontFamily;
-            div.classList.add("icon");
+            div.classList.add("icon-resolve");
             return div;
           },
         };
@@ -112,6 +112,7 @@
 
       function iconsRender(icons) {
         const sections = document.createElement("div");
+        sections.classList.add("sections");
         Object.entries(icons).forEach(([fontName, font]) => {
           // section
           const section = document.createElement("div");
@@ -125,9 +126,11 @@
               fontsExpanded[fontName] ? iconFold : iconUnfold
             )?.toElement()
           );
+          const fontNameCapital =
+            fontName.charAt(0).toUpperCase() + fontName.slice(1);
           sectionHeader.appendChild(
             document.createTextNode(
-              `${fontName} (${Object.keys(font.names).length})`
+              `${fontNameCapital} (${Object.keys(font.names).length})`
             )
           );
           sectionHeader.classList.add("section-header");
@@ -274,109 +277,103 @@
     </script>
     <style type="text/css">
       :root {
-        --bg-hard: #1d2021;
-        --bg: #282828;
-        --bg-soft: #32302f;
-        --bg_1: #3c3836;
-        --bg_2: #504945;
-        --bg_3: #665c54;
-        --bg_4: #7c6f64;
-        --bg-bold: #928374;
-        --fg-bold: #a89984;
-        --fg_2: #bdae93;
-        --fg_1: #d5c4a1;
-        --fg: #ebdbb2;
-        --fg-1: #fbf1c7;
-
-        --red-dark: #9d0006;
-        --red: #cc241d;
-        --red-light: #fb4934;
-
-        --green-dark: #79740e;
-        --green: #98971a;
-        --green-light: #b8bb26;
-
-        --yellow-dark: #b57614;
-        --yellow: #d79921;
-        --yellow-light: #fabd2f;
-
-        --blue-dark: #076678;
-        --blue: #458588;
-        --blue-light: #83a598;
-
-        --purple-dark: #8f3f71;
-        --purple: #b16286;
-        --purple-light: #d3869b;
-
-        --aqua-dark: #427b58;
-        --aqua: #689d6a;
-        --aqua-light: #8ec07c;
-
-        --orange-dark: #af3a03;
-        --orange: #d65d0e;
-        --orange-light: #fe8019;
-
-        --header-height: 2em;
-
-        scrollbar-color: var(--bg_4) var(--fg);
+        /* defaults */
         font-family: "IBM Plex Sans", sans;
+
+        /* sizes */
+        --border-width: 1px;
+        --border-radius: 0.4rem;
+        --icon-size: 1.3rem;
+        --header-height: 3rem;
+        --header-padding: 0.5rem;
+
+        /* Color Theme */
+        --foreground-color: #282828; /* bg */
+        --background-color: #fbf1c7; /* fg-1 */
+        --header-color: #d5c4a1; /* fg_1 */
+        --section-header-color: #ebdbb2; /* fg */
+        --border-color: #7c6f64; /* bg_4 */
+        --icon-border-color: #a89984; /* fg-bold */
+        --icon-background-color: #f2e5bc;
+        --icon-hover-color: #ebdbb2; /* fg */
+        --icon-active-color: #d5c4a1; /* fg_1 */
+        --selection-color: #bdae93; /* fg_2 */
+        --preview-fill-color: #b16286; /* purple */
+        --preview-stroke-color: #8f3f71; /* purple-dark */
+        scrollbar-color: var(--border-color) var(--section-header-color);
       }
       ::selection {
-        background-color: var(--fg-bold);
+        background-color: var(--selection-color);
       }
       body {
-        background-color: var(--fg-1);
+        color: var(--foreground-color);
+        background-color: var(--background-color);
         margin: 0px;
       }
 
-      .icon {
+      .icon-resolve {
         display: inline-block;
         text-align: center;
         text-decoration: none;
-        user-select: none;
         text-rendering: auto;
-        padding: 0.2em;
-        font-size: 0.9rem;
+        user-select: none;
+        font-size: calc(var(--icon-size) * 4 / 5);
       }
 
+      /* Header */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        background-color: var(--header-color);
+
+        border-bottom-style: solid;
+        border-bottom-width: var(--border-width);
+        border-color: var(--border-color);
+        box-shadow: 0 0 0.5rem rgb(0 0 0 / 0.2);
+
+        box-sizing: border-box;
+        padding: var(--header-padding);
+        height: var(--header-height);
+      }
+      .icon-name {
+        display: inline;
+        color: var(--foreground-color);
+        margin-left: var(--header-padding);
+      }
       #header {
         position: fixed;
         top: 0;
         width: 100%;
-        background-color: var(--fg_1);
-        border-bottom-style: solid;
-        border-bottom-width: 1px;
-        border-color: var(--bg_4);
-        box-shadow: 0 0 0.4em rgb(0 0 0 / 0.3);
-        padding: 0.3rem;
-        display: flex;
-        justify-content: space-between;
-        height: calc(var(--header-height) - 0.5rem);
       }
       #header-search {
         display: flex;
         align-items: center;
-        background-color: var(--fg);
-        border-color: var(--bg_4);
+
+        background-color: var(--section-header-color);
+
+        border-color: var(--border-color);
         border-style: solid;
-        border-radius: 0.3rem;
-        border-width: 1px;
-        margin-right: 1rem;
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
+
+        height: calc(var(--header-height) - var(--header-padding) * 4);
+        padding: var(--header-padding);
       }
       #header-search-input {
-        background-color: var(--fg);
+        background-color: var(--section-header-color);
         border-style: none;
         outline: none;
-        margin-left: 0.3rem;
-        margin-right: 0.3rem;
       }
 
+      /* Preview */
       #preview-dialog {
         padding: 0;
-        background-color: var(--fg-1);
-        border-radius: 0.3rem;
-        border-width: 1px;
-        border-color: var(--bg_4);
+        background-color: var(--background-color);
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
+        border-color: var(--border-color);
         width: 60%;
         height: 60%;
       }
@@ -392,132 +389,160 @@
         display: flex;
         flex-direction: column;
       }
-      #preview-header {
+      #preview-buttons {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.5rem;
+        gap: var(--header-padding);
+      }
+      .preview-button {
+        outline: none;
+        transition: all 300ms;
+        cursor: pointer;
+        padding: 0;
 
-        padding: 0.5rem;
+        border-style: solid;
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
+        border-color: var(--border-color);
 
-        background-color: var(--fg_1);
-        border-bottom-style: solid;
-        border-bottom-width: 1px;
-        border-color: var(--bg_4);
+        height: calc(var(--header-height) - var(--header-padding) * 2);
+        width: calc(var(--header-height) - var(--header-padding) * 2);
+
+        color: var(--foreground-color);
+        background-color: var(--section-header-color);
+      }
+      .preview-button:hover {
+        background-color: var(--icon-background-color);
+      }
+      .preview-button:active {
+        background-color: var(--background-color);
+      }
+      .preview-button > .icon-resolve {
+        font-size: var(--icon-size);
       }
       #preview-svg {
         flex: 1;
+
         display: flex;
         justify-content: space-around;
         align-items: center;
       }
       #preview-svg > svg {
-        width: min(45vh, 45vw);
-        height: min(45vh, 45vw);
+        width: min(calc(50vh - var(--header-height)), 50vw);
+        height: min(calc(50vh - var(--header-height)), 50vw);
 
         border-style: solid;
-        border-color: var(--fg_1);
-        border-radius: 0.3rem;
-        border-width: 1px;
+        border-color: var(--icon-border-color);
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
 
-        background-color: var(--fg);
+        background-color: var(--icon-background-color);
 
-        fill: var(--purple);
-        stroke: var(--purple-dark);
-        stroke-width: 1px;
+        /* svg */
+        fill: var(--preview-fill-color);
+        stroke: var(--preview-stroke-color);
+        stroke-width: 1px; /* size SVG coordiante system (keep it static) */
       }
 
+      /* Result Icons */
       #result {
+        color: var(--foreground-color);
+        margin-top: var(--header-height);
+        padding: var(--header-padding);
+      }
+      .sections {
         display: flex;
         flex-direction: column;
-        padding: 0.3rem;
-        margin-top: var(--header-height);
+        gap: var(--header-padding);
       }
       .section-header {
-        background-color: var(--fg);
+        background-color: var(--section-header-color);
 
-        border-radius: 0.3rem;
         border-style: solid;
-        border-width: 1px;
-        border-color: var(--bg_4);
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
+        border-color: var(--border-color);
 
-        padding: 0.3rem;
-        margin-top: 0.3rem;
-        margin-bottom: 0.3rem;
+        display: flex;
+        align-items: center;
+        gap: var(--header-padding);
+
+        padding: var(--header-padding);
         user-select: none;
-        font-size: 0.9rem;
       }
       .section-icons {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.4rem;
-        padding: 0.3rem;
+        align-items: center;
+        gap: calc(var(--icon-size) / 3);
+
+        padding: calc(var(--icon-size) / 3);
       }
       .section-icons > div {
-        font-size: 1.1rem;
-        border-color: var(--fg-bold);
-        border-radius: 0.3em;
-        border-width: 1px;
-        border-style: solid;
-        padding: 0.5em;
-        transition: all 200ms;
-        width: 1em;
-        height: 1em;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        background-color: var(--icon-background-color);
         cursor: pointer;
         user-select: none;
+        transition: all 200ms;
+
+        border-color: var(--icon-border-color);
+        border-radius: var(--border-radius);
+        border-width: var(--border-width);
+        border-style: solid;
+
+        font-size: var(--icon-size);
+        padding: calc(var(--icon-size) / 3);
+        width: var(--icon-size);
+        height: var(--icon-size);
       }
       .section-icons > div:hover {
-        background-color: var(--fg);
+        background-color: var(--icon-hover-color);
       }
       .section-icons > div:active {
-        background-color: var(--fg_1);
-      }
-      .icon-name {
-        display: inline;
-        color: var(--bg_2);
-        margin-right: 1rem;
-        margin-left: 0.5rem;
-      }
-
-      .button {
-        background-color: var(--fg);
-        outline: none;
-        border-radius: 0.3em;
-        border-style: solid;
-        border-width: 1px;
-        border-color: var(--bg_4);
-        transition: all 200ms;
-        font-size: 1.1em;
-      }
-      .button:hover {
-        background-color: var(--fg-1);
-      }
-      .button:active {
-        background-color: var(--purple-light);
+        background-color: var(--icon-active-color);
       }
     </style>
   </head>
   <body>
-    <div id="header">
+    <!-- header -->
+    <div class="header" id="header">
       <div id="header-search">
         <input id="header-search-input" />
         <div id="collapse"></div>
       </div>
       <div class="icon-name" id="header-icon-name"></div>
     </div>
+
+    <!-- result icons -->
+    <div id="result"></div>
+
+    <!-- preview -->
     <dialog id="preview-dialog">
       <div id="preview-content">
-        <div id="preview-header">
+        <div class="header" id="preview-header">
           <div class="icon-name" id="preview-name">icon-name</div>
-          <div>
-            <button class="button" id="preview-copy-svg">Copy SVG</button>
-            <button class="button" id="preview-copy-name">Copy Name</button>
-            <button class="button" id="preview-close">Close</button>
+          <div id="preview-buttons">
+            <button
+              class="preview-button"
+              id="preview-copy-svg"
+              title="Copy SVG"
+            ></button>
+            <button
+              class="preview-button"
+              id="preview-copy-name"
+              title="Copy Name"
+            ></button>
+            <button
+              class="preview-button"
+              id="preview-close"
+              title="Close Preview"
+            ></button>
           </div>
         </div>
         <div id="preview-svg"></div>
       </div>
     </dialog>
-    <div id="result"></div>
   </body>
 </html>
