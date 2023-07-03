@@ -5,9 +5,8 @@
       import { parse as parseFont } from "./modules/opentype.module.js";
 
       // setup theme early
-      const root = document.querySelector(":root");
-      if (localStorage.getItem("theme-dark")) {
-        root.classList.add("theme-dark");
+      if (JSON.parse(localStorage.getItem("theme-dark"))) {
+        document.documentElement.classList.add("theme-dark");
       }
 
       class Font {
@@ -411,12 +410,11 @@
         const themeToggleButton = document.getElementById("theme-button");
         themeToggleButton.replaceChildren(ctx.iconUI.theme.toHTMLElement());
         themeToggleButton.addEventListener("click", () => {
-          const root = document.querySelector(":root");
           // apply theme without search results as it is much faster
           searchResult.replaceChildren();
           localStorage.setItem(
             "theme-dark",
-            root.classList.toggle("theme-dark")
+            document.documentElement.classList.toggle("theme-dark")
           );
           resultUpdate();
         });
