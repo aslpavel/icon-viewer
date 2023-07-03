@@ -4,178 +4,321 @@
     <script type="module">
       import { parse as parseFont } from "./modules/opentype.module.js";
 
-      let fonts = {}; // loaded fonts
-      let fontsExpanded = {};
-      const iconFold = "material-minus-box-outline";
-      const iconFoldAll = "material-collapse-all-outline";
-      const iconUnfold = "material-plus-box-outline";
-      const iconUnfoldAll = "material-expand-all-outline";
-
-      // load and register fonts and names mappings
-      async function fontLoad(fontDesc) {
-        // load font and metadata
-        const [metadata, fontData] = await Promise.all([
-          fetch(fontDesc.metadata).then((r) => r.json()),
-          fetch(fontDesc.font).then((r) => r.arrayBuffer()),
-        ]);
-
-        // register font
-        document.fonts.add(new FontFace(fontDesc.name, fontData));
-
-        // create style
-        const style = document.createElement("style");
-        style.type = "text/css";
-        style.innerText = `.${fontDesc.name} {font-family: "${fontDesc.name}"}`;
-        document.getElementsByTagName("head")[0].appendChild(style);
-
-        const font = parseFont(fontData);
-        return [fontDesc.name, { font, names: metadata.names }];
+      // setup theme early
+      const root = document.querySelector(":root");
+      if (localStorage.getItem("theme-dark")) {
+        root.classList.add("theme-dark");
       }
 
-      function iconResolve(iconFullName) {
-        const match = iconFullName.match(
-          /(?<fontFamily>[^-]*)-(?<iconName>.*)/
-        );
-        if (!match) {
-          return null;
-        }
-        const { fontFamily, iconName } = match.groups;
-        const font = fonts[fontFamily];
-        if (!font) {
-          return null;
-        }
-        const codepoint = font.names[iconName];
-        if (!codepoint) {
-          return null;
-        }
-        const content = String.fromCodePoint(codepoint);
-        return {
-          fontFamily,
-          name: iconName,
-          codepoint,
-          content,
-          font: font.font,
-          get glyph() {
-            return this.font.charToGlyph(content);
-          },
-          toSVG() {
-            const glyph = this.glyph,
-              head = this.font.tables.head,
-              padding = head.unitsPerEm / 10,
-              width = head.xMax - head.xMin + 2 * padding,
-              height = head.yMax - head.yMin + 2 * padding,
-              baseline = head.yMax + padding,
-              sideEm = Math.max(width, height);
-            const side = 128,
-              scale = side / sideEm,
-              size = head.unitsPerEm * scale,
-              x = ((sideEm - glyph.advanceWidth) / 2) * scale,
-              y = baseline * scale;
+      class Font {
+        constructor(family, font, nameToCodepoint) {
+          // match codepoints with glyphs frome the font
+          const codepointToGlyph = Iter.range(font.numGlyphs)
+            .filterMap((index) => {
+              const glyph = font.glyphs.get(index);
+              if (glyph?.unicode != null) {
+                return [glyph.unicode, glyph];
+              }
+            })
+            .collectMap();
+          const icons = new Iter(Object.entries(nameToCodepoint))
+            .filterMap(([name, codepoint]) => {
+              const glyph = codepointToGlyph.get(codepoint);
+              if (glyph) {
+                return [name, new Icon(this, name, glyph)];
+              }
+            })
+            .collectMap();
 
-            const svg = [
-              '<?xml version="1.0"?>',
-              `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${side} ${side}">`,
-              `  ${this.glyph.getPath(x, y, size).toSVG()}`,
-              "</svg>",
-            ].join("\n");
+          this.family = family;
+          this.font = font;
+          this.icons = icons;
+        }
 
-            return svg;
-          },
-          toElement() {
-            const div = document.createElement("div");
-            div.textContent = this.content;
-            div.style.fontFamily = this.fontFamily;
-            div.classList.add("icon-resolve");
-            return div;
-          },
-        };
+        // Create and registier font from description
+        static async load(fontDesc) {
+          const [metadata, fontData] = await Promise.all([
+            fetch(fontDesc.metadata).then((r) => r.json()),
+            fetch(fontDesc.font).then((r) => r.arrayBuffer()),
+          ]);
+
+          // register font
+          document.fonts.add(new FontFace(fontDesc.name, fontData));
+
+          // create style
+          const style = document.createElement("style");
+          style.type = "text/css";
+          style.innerText = `.${fontDesc.name} {font-family: "${fontDesc.name}"}`;
+          document.getElementsByTagName("head")[0].appendChild(style);
+
+          const font = parseFont(fontData);
+          return new Font(fontDesc.name, font, metadata.names);
+        }
+
+        getIcon(name) {
+          return this.icons.get(name);
+        }
       }
 
-      // given list of {font: {name: content}} select names containing selector
-      function iconsSelect(fonts, selector) {
-        if (selector.length == 0) {
-          return fonts;
+      class Icon {
+        constructor(font, name, glyph) {
+          this.font = font;
+          this.glyph = glyph;
+          this.name = name;
+          this.codepoint = glyph.unicode;
+          this.content = String.fromCodePoint(glyph.unicode);
         }
-        const regex = new RegExp(selector);
-        const selected = Object.entries(fonts)
-          .map(([fontName, font]) => {
-            const names = Object.fromEntries(
-              Object.entries(font.names).filter(
-                ([name, content]) => name.search(regex) >= 0
-              )
+
+        get fullName() {
+          return `${this.font.family}-${this.name}`;
+        }
+
+        toSvgString() {
+          const glyph = this.glyph,
+            head = this.font.font.tables.head,
+            padding = head.unitsPerEm / 10,
+            width = head.xMax - head.xMin + 2 * padding,
+            height = head.yMax - head.yMin + 2 * padding,
+            baseline = head.yMax + padding,
+            sideEm = Math.max(width, height);
+          const side = 128,
+            scale = side / sideEm,
+            size = head.unitsPerEm * scale,
+            x = ((sideEm - glyph.advanceWidth) / 2) * scale,
+            y = baseline * scale;
+
+          return [
+            '<?xml version="1.0"?>',
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${side} ${side}">`,
+            `  ${this.glyph.getPath(x, y, size).toSVG()}`,
+            "</svg>",
+          ].join("\n");
+        }
+
+        toHTMLElement() {
+          const div = document.createElement("div");
+          div.textContent = this.content;
+          div.style.fontFamily = this.font.family;
+          div.classList.add("icon-resolve");
+          return div;
+        }
+      }
+
+      class IconSet {
+        constructor(icons) {
+          this.icons = icons; // Map<fontFamily, Map<iconName, Icon>>
+          this.size = new Iter(icons.values()).fold(
+            0,
+            (size, nameToIcon) => size + nameToIcon.size
+          );
+        }
+
+        static fromFonts(fonts) {
+          const icons = new Iter(fonts)
+            .map((font) => [font.family, font.icons])
+            .collectMap();
+          return new IconSet(icons);
+        }
+
+        // Create new IconSet only containing icons with names matching selector
+        filter(selector) {
+          if (selector.length == 0) {
+            return this;
+          }
+          const regex = new RegExp(selector);
+          const icons = new Iter(this.icons)
+            .filterMap(([fontFamily, icons]) => {
+              const iconsFiltered = new Iter(icons)
+                .filter(([iconName, icon]) => {
+                  return iconName.search(regex) >= 0;
+                })
+                .collectMap();
+              return iconsFiltered.size == 0
+                ? null
+                : [fontFamily, iconsFiltered];
+            })
+            .collectMap();
+          return new IconSet(icons);
+        }
+
+        find(iconFullName) {
+          const match = iconFullName.match(
+            /(?<fontFamily>[^-]*)-(?<iconName>.*)/
+          );
+          if (!match) {
+            return null;
+          }
+          const { fontFamily, iconName } = match.groups;
+          return this.icons.get(fontFamily)?.get(iconName);
+        }
+
+        toHTMLElement(ctx) {
+          const sections = document.createElement("div");
+          sections.classList.add("sections");
+          new Iter(this.icons).forEach(([fontName, names]) => {
+            // section
+            const section = document.createElement("div");
+            section.classList.add("section");
+            sections.appendChild(section);
+
+            // header
+            const sectionHeader = document.createElement("div");
+            sectionHeader.appendChild(
+              (ctx.sectionsExpanded[fontName]
+                ? ctx.iconUI.fold
+                : ctx.iconUI.unfold
+              ).toHTMLElement()
             );
-            return [fontName, { ...font, names }];
-          })
-          .filter(([fontName, font]) => Object.keys(font.names).length > 0);
-        return Object.fromEntries(selected);
+            const fontNameCapital =
+              fontName.charAt(0).toUpperCase() + fontName.slice(1);
+            sectionHeader.appendChild(
+              document.createTextNode(`${fontNameCapital} (${names.size})`)
+            );
+            sectionHeader.classList.add("section-header");
+            sectionHeader.addEventListener("click", (event) => {
+              if (ctx.sectionsExpanded[fontName]) {
+                ctx.sectionsExpanded[fontName] = false;
+                sectionIcons.style.display = "none";
+                sectionHeader.replaceChild(
+                  ctx.iconUI.unfold.toHTMLElement(),
+                  sectionHeader.firstChild
+                );
+              } else {
+                ctx.sectionsExpanded[fontName] = true;
+                sectionIcons.style.display = "";
+                sectionHeader.replaceChild(
+                  ctx.iconUI.fold.toHTMLElement(),
+                  sectionHeader.firstChild
+                );
+              }
+            });
+            section.appendChild(sectionHeader);
+
+            // icons
+            const headerIconName = document.getElementById("header-icon-name");
+            const sectionIcons = document.createElement("div");
+            sectionIcons.classList.add("section-icons");
+            sectionIcons.classList.add(fontName);
+            sectionIcons.style.display = ctx.sectionsExpanded[fontName]
+              ? ""
+              : "none";
+            new Iter(names).forEach(([name, icon]) => {
+              const iconElement = document.createElement("div");
+              const iconName = `${fontName}-${name}`;
+              iconElement.textContent = icon.content;
+              iconElement.dataset.name = iconName;
+              iconElement.addEventListener("click", () => previewShow(icon));
+              iconElement.addEventListener("mouseover", (event) => {
+                headerIconName.innerText = event.target.dataset.name;
+              });
+              iconElement.addEventListener("mouseleave", (event) => {
+                headerIconName.innerText = "";
+              });
+              sectionIcons.appendChild(iconElement);
+            });
+            section.appendChild(sectionIcons);
+          });
+          return sections;
+        }
       }
 
-      function iconsRender(icons) {
-        const sections = document.createElement("div");
-        sections.classList.add("sections");
-        Object.entries(icons).forEach(([fontName, font]) => {
-          // section
-          const section = document.createElement("div");
-          section.classList.add("section");
-          sections.appendChild(section);
+      class Iter {
+        constructor(iterable) {
+          this.iter = iterable[Symbol.iterator]();
+        }
 
-          // header
-          const sectionHeader = document.createElement("div");
-          sectionHeader.appendChild(
-            iconResolve(
-              fontsExpanded[fontName] ? iconFold : iconUnfold
-            )?.toElement()
-          );
-          const fontNameCapital =
-            fontName.charAt(0).toUpperCase() + fontName.slice(1);
-          sectionHeader.appendChild(
-            document.createTextNode(
-              `${fontNameCapital} (${Object.keys(font.names).length})`
-            )
-          );
-          sectionHeader.classList.add("section-header");
-          sectionHeader.addEventListener("click", (event) => {
-            if (fontsExpanded[fontName]) {
-              fontsExpanded[fontName] = false;
-              sectionIcons.style.display = "none";
-              sectionHeader.replaceChild(
-                iconResolve(iconUnfold)?.toElement(),
-                sectionHeader.firstChild
-              );
-            } else {
-              fontsExpanded[fontName] = true;
-              sectionIcons.style.display = "";
-              sectionHeader.replaceChild(
-                iconResolve(iconFold)?.toElement(),
-                sectionHeader.firstChild
-              );
+        [Symbol.iterator]() {
+          return this.iter;
+        }
+
+        next() {
+          return this.iter.next();
+        }
+
+        static range(start, stop, step = 1) {
+          function* rangeGen() {
+            if (stop == null) {
+              stop = start;
+              start = 0;
+            }
+            for (let i = start; step > 0 ? i < stop : i > stop; i += step) {
+              yield i;
+            }
+          }
+          return new Iter(rangeGen());
+        }
+
+        map(mapFn) {
+          return this.applyGenFn(function* mapGen(iter) {
+            for (let item of iter) {
+              yield mapFn(item);
             }
           });
-          section.appendChild(sectionHeader);
+        }
 
-          // icons
-          const headerIconName = document.getElementById("header-icon-name");
-          const sectionIcons = document.createElement("div");
-          sectionIcons.classList.add("section-icons");
-          sectionIcons.classList.add(fontName);
-          sectionIcons.style.display = fontsExpanded[fontName] ? "" : "none";
-          Object.entries(font.names).forEach(([name, codepoint]) => {
-            const icon = document.createElement("div");
-            const iconName = `${fontName}-${name}`;
-            icon.textContent = String.fromCodePoint(codepoint);
-            icon.dataset.name = iconName;
-            icon.addEventListener("click", () => previewShow(iconName));
-            icon.addEventListener("mouseover", (event) => {
-              headerIconName.innerText = event.target.dataset.name;
-            });
-            icon.addEventListener("mouseleave", (event) => {
-              headerIconName.innerText = "";
-            });
-            sectionIcons.appendChild(icon);
+        filter(predFn = (item) => item) {
+          return this.applyGenFn(function* filterGen(iter) {
+            for (let item of iter) {
+              if (predFn(item)) {
+                yield item;
+              }
+            }
           });
-          section.appendChild(sectionIcons);
-        });
-        return sections;
+        }
+
+        filterMap(filterMapFn) {
+          return this.applyGenFn(function* filterMapGen(iter) {
+            for (let outerItem of iter) {
+              const innerItem = filterMapFn(outerItem);
+              if (innerItem) {
+                yield innerItem;
+              }
+            }
+          });
+        }
+
+        flatMap(flatMapFn) {
+          return Iter.applyGenFn(function* flatMapGen() {
+            for (let outerItem of iter) {
+              let innerItems = flatMapFn(outerItem);
+              if (innerItems) {
+                for (let innerItem of innerItems) {
+                  yield innerItem;
+                }
+              }
+            }
+          });
+        }
+
+        forEach(forEachFn) {
+          for (let item of this.iter) {
+            forEachFn(item);
+          }
+        }
+
+        fold(initialValue, foldFn) {
+          let acc = initialValue;
+          for (let item of this.iter) {
+            acc = foldFn(acc, item);
+          }
+          return acc;
+        }
+
+        collectArray() {
+          return Array.from(this.iter);
+        }
+
+        collectMap() {
+          return new Map(this.iter);
+        }
+
+        collectObject() {
+          return Object.fromEntries(this.iter);
+        }
+
+        applyGenFn(genFn) {
+          return new Iter(genFn(this.iter));
+        }
       }
 
       function debounce(func, timeout = 300) {
@@ -188,73 +331,92 @@
         };
       }
 
-      function previewShow(iconName) {
-        const icon = iconResolve(iconName);
+      function previewShow(icon) {
         const previewSVG = document.getElementById("preview-svg");
-        previewSVG.innerHTML = icon.toSVG();
+        previewSVG.innerHTML = icon.toSvgString();
 
         const previewName = document.getElementById("preview-name");
-        previewName.textContent = iconName;
-
-        const previewCopyName = document.getElementById("preview-copy-name");
-        previewCopyName.dataset.name = iconName;
+        previewName.textContent = icon.fullName;
 
         const previewDialog = document.getElementById("preview-dialog");
-        previewDialog.dataset.name = iconName;
+        previewDialog.dataset.name = icon.fullName;
         previewDialog.showModal();
       }
 
-      function main(fonts) {
+      function setup(iconSet) {
+        // setup context
+        const iconUI = {
+          close: iconSet.find("material-close-circle-outline"),
+          clipboard: iconSet.find("material-clipboard-outline"),
+          copySVG: iconSet.find("material-vector-curve"),
+          fold: iconSet.find("material-minus-box-outline"),
+          foldAll: iconSet.find("material-collapse-all-outline"),
+          unfold: iconSet.find("material-plus-box-outline"),
+          unfoldAll: iconSet.find("material-expand-all-outline"),
+          theme: iconSet.find("material-theme-light-dark"),
+        };
+        const sectionsExpanded = new Iter(iconSet.icons.keys())
+          .map((name) => [name, true])
+          .collectObject();
+        const ctx = { iconUI, sectionsExpanded };
+
         // preview dialog
         const previewDialog = document.getElementById("preview-dialog");
         const previewClose = document.getElementById("preview-close");
-        previewClose.replaceChildren(
-          iconResolve("material-close-circle-outline").toElement()
-        );
+        previewClose.replaceChildren(ctx.iconUI.close.toHTMLElement());
         previewClose.addEventListener("click", () => {
           previewDialog.close();
         });
         const previewCopyName = document.getElementById("preview-copy-name");
-        previewCopyName.replaceChildren(
-          iconResolve("material-clipboard-outline").toElement()
-        );
+        previewCopyName.replaceChildren(ctx.iconUI.clipboard.toHTMLElement());
         previewCopyName.addEventListener("click", () => {
           navigator.clipboard.writeText(previewDialog.dataset.name);
         });
         const previewCopySVG = document.getElementById("preview-copy-svg");
-        previewCopySVG.replaceChildren(
-          iconResolve("material-vector-curve").toElement()
-        );
+        previewCopySVG.replaceChildren(ctx.iconUI.copySVG.toHTMLElement());
         previewCopySVG.addEventListener("click", () => {
-          let icon = iconResolve(previewDialog.dataset.name);
-          navigator.clipboard.writeText(icon.toSVG());
+          let icon = iconSet.find(previewDialog.dataset.name);
+          navigator.clipboard.writeText(icon.toSvgString());
         });
 
-        // update shown icons
-        const result = document.getElementById("result");
+        // serach
+        const searchResult = document.getElementById("search-result");
+        const searchInput = document.getElementById("header-search-input");
         const resultUpdate = () => {
-          result.replaceChildren(
-            iconsRender(iconsSelect(fonts, selector.value))
-          );
+          let iconSetFilter = iconSet
+            .filter(searchInput.value)
+            .toHTMLElement(ctx);
+          searchResult.replaceChildren(iconSetFilter);
         };
-
-        // selector
-        const selector = document.getElementById("header-search-input");
-        selector.addEventListener("input", debounce(resultUpdate));
+        searchInput.addEventListener("input", debounce(resultUpdate));
 
         // expand/collapse
         const collapse = document.getElementById("collapse");
-        collapse.appendChild(iconResolve(iconFoldAll)?.toElement());
+        collapse.appendChild(ctx.iconUI.foldAll.toHTMLElement());
         collapse.addEventListener("click", () => {
-          const hide = Object.values(fontsExpanded).reduce(
+          const hide = Object.values(ctx.sectionsExpanded).reduce(
             (acc, item) => acc || item,
             false
           );
-          for (const name in fontsExpanded) {
-            fontsExpanded[name] = !hide;
+          for (const name in ctx.sectionsExpanded) {
+            ctx.sectionsExpanded[name] = !hide;
           }
           collapse.replaceChildren(
-            iconResolve(hide ? iconUnfoldAll : iconFoldAll)?.toElement()
+            (hide ? ctx.iconUI.unfoldAll : ctx.iconUI.foldAll).toHTMLElement()
+          );
+          resultUpdate();
+        });
+
+        // Light/Dark theme button
+        const themeToggleButton = document.getElementById("theme-button");
+        themeToggleButton.replaceChildren(ctx.iconUI.theme.toHTMLElement());
+        themeToggleButton.addEventListener("click", () => {
+          const root = document.querySelector(":root");
+          // apply theme without search results as it is much faster
+          searchResult.replaceChildren();
+          localStorage.setItem(
+            "theme-dark",
+            root.classList.toggle("theme-dark")
           );
           resultUpdate();
         });
@@ -265,14 +427,10 @@
       window.addEventListener("load", async (event) => {
         const fontDescsRequest = await fetch("descriptions.json");
         const fontDescs = await fontDescsRequest.json();
-        const sources = Object.fromEntries(
-          await Promise.all(fontDescs.map(fontLoad))
+        const iconSet = IconSet.fromFonts(
+          await Promise.all(fontDescs.map(Font.load))
         );
-        fonts = sources;
-        fontsExpanded = Object.fromEntries(
-          Object.keys(sources).map((name) => [name, true])
-        );
-        main(fonts);
+        setup(iconSet);
       });
     </script>
     <style type="text/css">
@@ -288,22 +446,46 @@
         --header-padding: 0.5rem;
 
         /* Color Theme */
-        --foreground-color: #282828; /* bg */
-        --background-color: #fbf1c7; /* fg-1 */
-        --header-color: #d5c4a1; /* fg_1 */
-        --section-header-color: #ebdbb2; /* fg */
-        --border-color: #7c6f64; /* bg_4 */
-        --icon-border-color: #a89984; /* fg-bold */
-        --icon-background-color: #f2e5bc;
-        --icon-hover-color: #ebdbb2; /* fg */
-        --icon-active-color: #d5c4a1; /* fg_1 */
-        --selection-color: #bdae93; /* fg_2 */
+        --foreground-color: #3c3836; /* fg */
+        --background-color: #fbf1c7; /* bg */
+        --header-color: #d5c4a1; /* bg+2 */
+        --section-header-color: #ebdbb2; /* bg+1 */
+        --border-color: #7c6f64; /* fg-bold */
+        --icon-border-color: #a89984; /* bg+4 */
+        --icon-background-color: #f2e5bc; /* bg-soft */
+        --icon-hover-color: #ebdbb2; /* bg+1 */
+        --icon-active-color: #d5c4a1; /* bg+2 */
+        --selection-color: #bdae93; /* bg+3 */
         --preview-fill-color: #b16286; /* purple */
         --preview-stroke-color: #8f3f71; /* purple-dark */
-        scrollbar-color: var(--border-color) var(--section-header-color);
+      }
+      .theme-dark {
+        --foreground-color: #ebdbb2; /* fg */
+        --background-color: #282828; /* bg */
+        --header-color: #504945; /* bg+2 */
+        --section-header-color: #3c3836; /* bg+1 */
+        --border-color: #928374; /* bg-bold */
+        --icon-border-color: #665c54; /* bg+4 */
+        --icon-background-color: #32302f; /* bg-soft */
+        --icon-hover-color: #3c3836; /* bg+1 */
+        --icon-active-color: #504945; /* bg+2 */
+        --selection-color: #665c54; /* bg+3 */
+        --preview-fill-color: #b16286; /* purple */
+        --preview-stroke-color: #d3869b; /* purple-bold */
       }
       ::selection {
         background-color: var(--selection-color);
+      }
+      html {
+        scrollbar-color: var(--border-color) var(--section-header-color);
+      }
+      ::-webkit-scrollbar {
+        background: var(--section-header-color);
+        width: var(--border-radius);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: var(--border-radius);
       }
       body {
         color: var(--foreground-color);
@@ -362,6 +544,7 @@
         padding: var(--header-padding);
       }
       #header-search-input {
+        color: var(--foreground-color);
         background-color: var(--section-header-color);
         border-style: none;
         outline: none;
@@ -393,7 +576,7 @@
         display: flex;
         gap: var(--header-padding);
       }
-      .preview-button {
+      .header-button {
         outline: none;
         transition: all 300ms;
         cursor: pointer;
@@ -410,13 +593,13 @@
         color: var(--foreground-color);
         background-color: var(--section-header-color);
       }
-      .preview-button:hover {
+      .header-button:hover {
         background-color: var(--icon-background-color);
       }
-      .preview-button:active {
+      .header-button:active {
         background-color: var(--background-color);
       }
-      .preview-button > .icon-resolve {
+      .header-button > .icon-resolve {
         font-size: var(--icon-size);
       }
       #preview-svg {
@@ -427,8 +610,8 @@
         align-items: center;
       }
       #preview-svg > svg {
-        width: min(calc(50vh - var(--header-height)), 50vw);
-        height: min(calc(50vh - var(--header-height)), 50vw);
+        width: min(calc(50dvh - var(--header-height)), 50dvw);
+        height: min(calc(50dvh - var(--header-height)), 50dvw);
 
         border-style: solid;
         border-color: var(--icon-border-color);
@@ -444,7 +627,7 @@
       }
 
       /* Result Icons */
-      #result {
+      #search-result {
         color: var(--foreground-color);
         margin-top: var(--header-height);
         padding: var(--header-padding);
@@ -513,10 +696,15 @@
         <div id="collapse"></div>
       </div>
       <div class="icon-name" id="header-icon-name"></div>
+      <button
+        class="header-button"
+        id="theme-button"
+        title="Toggle Light/Dark theme"
+      ></button>
     </div>
 
     <!-- result icons -->
-    <div id="result"></div>
+    <div id="search-result"></div>
 
     <!-- preview -->
     <dialog id="preview-dialog">
@@ -525,17 +713,17 @@
           <div class="icon-name" id="preview-name">icon-name</div>
           <div id="preview-buttons">
             <button
-              class="preview-button"
+              class="header-button"
               id="preview-copy-svg"
               title="Copy SVG"
             ></button>
             <button
-              class="preview-button"
+              class="header-button"
               id="preview-copy-name"
               title="Copy Name"
             ></button>
             <button
-              class="preview-button"
+              class="header-button"
               id="preview-close"
               title="Close Preview"
             ></button>
