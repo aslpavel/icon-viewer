@@ -33,5 +33,15 @@
     "name": "weather",
     "metadata": "weather.json",
     "font": "weather.ttf"
+  },
+  {
+    "name": "typicons",
+    "metadata": "typicons.json",
+    "font": "typicons.ttf"
+  },
+  {
+    "name": "notoemoji",
+    "metadata": "notoemoji.json",
+    "font": "notoemoji.ttf"
   }
 ]

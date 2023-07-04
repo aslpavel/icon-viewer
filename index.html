@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="module">
       import { parse as parseFont } from "./modules/opentype.module.js";
 
@@ -361,6 +362,17 @@
 
         // preview dialog
         const previewDialog = document.getElementById("preview-dialog");
+        previewDialog.addEventListener("click", (event) => {
+          const dialogDims = previewDialog.getBoundingClientRect();
+          if (
+            event.clientX < dialogDims.left ||
+            event.clientX > dialogDims.right ||
+            event.clientY < dialogDims.top ||
+            event.clientX > dialogDims.bottom
+          ) {
+            previewDialog.close();
+          }
+        });
         const previewClose = document.getElementById("preview-close");
         previewClose.replaceChildren(ctx.iconUI.close.toHTMLElement());
         previewClose.addEventListener("click", () => {
@@ -431,7 +443,6 @@
         setup(iconSet);
       });
     </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style type="text/css">
       :root {
         /* sizes */
@@ -605,7 +616,10 @@
         gap: var(--header-padding);
       }
       #preview-buttons {
+        flex: 1;
         display: flex;
+        justify-content: end;
+        z-index: 1;
       }
       #preview-buttons > button {
         border-radius: 0;
