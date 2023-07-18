@@ -287,7 +287,7 @@ def notoemoji() -> Desc:
 
     with open(desc.metadata, "w") as meta_file:
         json.dump(
-            {"family": font.name["fullname"], "names": names},
+            {"family": font.name["family"], "names": names},
             meta_file,
             indent=2,
         )
@@ -428,7 +428,9 @@ class Font:
                 unicode_table_offset = subtable_offset + cmap.offset
         # breakpoint()
         if not unicode_table_offset:
-            raise ValueError("Only support unicode (0) format (4) cmap tables")
+            raise ValueError(
+                f"Only support unicode (0) format (4) cmap tables: {subtables}"
+            )
 
         # subtable header
         self.reader.seek(unicode_table_offset)

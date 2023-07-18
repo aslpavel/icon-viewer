@@ -6,7 +6,13 @@
       import { parse as parseFont } from "./modules/opentype.module.js";
 
       // setup theme early
-      if (JSON.parse(localStorage.getItem("theme-dark"))) {
+      const themeLocalStorage = localStorage.getItem("theme-dark");
+      if (
+        themeLocalStorage === null &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+      ) {
+        document.documentElement.classList.add("theme-dark");
+      } else if (JSON.parse(themeLocalStorage)) {
         document.documentElement.classList.add("theme-dark");
       }
 
@@ -336,7 +342,8 @@
         previewSVG.innerHTML = icon.toSvgString();
 
         const previewName = document.getElementById("preview-name");
-        previewName.textContent = icon.fullName;
+        const hexCodepoint = icon.codepoint.toString(16).toUpperCase();
+        previewName.innerHTML = `${icon.fullName} <span class="codepoint">U+${hexCodepoint}<span>`;
 
         const previewDialog = document.getElementById("preview-dialog");
         previewDialog.dataset.name = icon.fullName;
@@ -504,6 +511,9 @@
         background-color: var(--background-color);
         margin: 0px;
       }
+      .codepoint {
+        color: var(--border-color);
+      }
 
       .icon-resolve {
         display: inline-block;
@@ -529,7 +539,7 @@
 
         box-sizing: border-box;
         padding: var(--header-padding);
-        height: var(--header-height);
+        min-height: var(--header-height);
       }
       .icon-name {
         display: inline;
@@ -612,11 +622,12 @@
         flex-direction: column;
       }
       #preview-header {
-        flex-wrap: wrap;
         gap: var(--header-padding);
       }
       #preview-buttons {
         flex: 1;
+        align-self: start;
+
         display: flex;
         justify-content: end;
         z-index: 1;
