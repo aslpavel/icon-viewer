@@ -1,47 +1,47 @@
 [
   {
     "name": "material",
-    "metadata": "material.json",
-    "font": "material.ttf"
+    "metadata": "fonts/material.json",
+    "font": "fonts/material.ttf"
   },
   {
     "name": "fluent",
-    "metadata": "fluent.json",
-    "font": "fluent.ttf"
+    "metadata": "fonts/fluent.json",
+    "font": "fonts/fluent.ttf"
   },
   {
     "name": "phosphor",
-    "metadata": "phosphor.json",
-    "font": "phosphor.ttf"
+    "metadata": "fonts/phosphor.json",
+    "font": "fonts/phosphor.ttf"
   },
   {
     "name": "remix",
-    "metadata": "remix.json",
-    "font": "remix.ttf"
+    "metadata": "fonts/remix.json",
+    "font": "fonts/remix.ttf"
   },
   {
     "name": "codicon",
-    "metadata": "codicon.json",
-    "font": "codicon.ttf"
+    "metadata": "fonts/codicon.json",
+    "font": "fonts/codicon.ttf"
   },
   {
     "name": "awesome",
-    "metadata": "awesome.json",
-    "font": "awesome.ttf"
+    "metadata": "fonts/awesome.json",
+    "font": "fonts/awesome.ttf"
   },
   {
     "name": "weather",
-    "metadata": "weather.json",
-    "font": "weather.ttf"
+    "metadata": "fonts/weather.json",
+    "font": "fonts/weather.ttf"
   },
   {
     "name": "typicons",
-    "metadata": "typicons.json",
-    "font": "typicons.ttf"
+    "metadata": "fonts/typicons.json",
+    "font": "fonts/typicons.ttf"
   },
   {
     "name": "notoemoji",
-    "metadata": "notoemoji.json",
-    "font": "notoemoji.ttf"
+    "metadata": "fonts/notoemoji.json",
+    "font": "fonts/notoemoji.ttf"
   }
 ]

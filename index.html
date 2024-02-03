@@ -42,7 +42,7 @@
           this.icons = icons;
         }
 
-        // Create and registier font from description
+        // Create and register font from description
         static async load(fontDesc) {
           const [metadata, fontData] = await Promise.all([
             fetch(fontDesc.metadata).then((r) => r.json()),
@@ -398,7 +398,7 @@
           navigator.clipboard.writeText(icon.toSvgString());
         });
 
-        // serach
+        // search
         const searchResult = document.getElementById("search-result");
         const searchInput = document.getElementById("header-search-input");
         const resultUpdate = () => {
@@ -667,7 +667,7 @@
         /* svg */
         fill: var(--preview-fill-color);
         stroke: var(--preview-stroke-color);
-        stroke-width: 1px; /* size SVG coordiante system (keep it static) */
+        stroke-width: 1px; /* size SVG coordinate system (keep it static) */
       }
 
       /* Result Icons */

@@ -12,12 +12,20 @@ from typing import Dict, Optional, NamedTuple, BinaryIO, Any, Tuple, List
 
 class Desc(NamedTuple):
     name: str
-    metadata: str
-    font: str
+    metadata: Path
+    font: Path
+
+    @staticmethod
+    def from_name(name: str, root: Path) -> Desc:
+        return Desc(
+            name,
+            root.joinpath(f"{name}.json"),
+            root.joinpath(f"{name}.ttf"),
+        )
 
 
-def material() -> Desc:
-    desc = Desc("material", "material.json", "material.ttf")
+def material(root: Path) -> Desc:
+    desc = Desc.from_name("material", root)
     metadata = requests.get(
         "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/meta.json"
     ).json()
@@ -30,7 +38,7 @@ def material() -> Desc:
         name = meta["name"]
         codepoint = int(meta["codepoint"], 16)
         names[name] = codepoint
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {
                 "family": "Material Design Icons",
@@ -40,14 +48,14 @@ def material() -> Desc:
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def fluent() -> Desc:
-    desc = Desc("fluent", "fluent.json", "fluent.ttf")
+def fluent(root: Path) -> Desc:
+    desc = Desc.from_name("fluent", root)
     metadata = requests.get(
         "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.json"
     ).json()
@@ -67,7 +75,7 @@ def fluent() -> Desc:
         if suffix != "regular":
             name = f"{name}-{suffix}"
         names[name] = codepoint
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {
                 "family": "FluentSystemIcons-Resizable",
@@ -77,14 +85,14 @@ def fluent() -> Desc:
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def phosphor() -> Desc:
-    desc = Desc("phosphor", "phosphor.json", "phosphor.ttf")
+def phosphor(root: Path) -> Desc:
+    desc = Desc.from_name("phosphor", root)
     metadata = requests.get(
         "https://github.com/phosphor-icons/web/raw/master/src/regular/style.css"
     ).text
@@ -99,21 +107,21 @@ def phosphor() -> Desc:
         re.MULTILINE,
     ):
         names[match.group(1)] = int(match.group(2), 16)
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": "Phosphor", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def remix() -> Desc:
-    desc = Desc("remix", "remix.json", "remix.ttf")
+def remix(root: Path) -> Desc:
+    desc = Desc.from_name("remix", root)
     metadata = requests.get(
         "https://github.com/Remix-Design/RemixIcon/raw/master/fonts/remixicon.css"
     ).text
@@ -133,21 +141,21 @@ def remix() -> Desc:
         if suffix != "line":
             name = f"{name}-{suffix}"
         names[name] = int(match.group(3), 16)
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": "remixicon", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def typicons() -> Desc:
-    desc = Desc("typicons", "typicons.json", "typicons.ttf")
+def typicons(root: Path) -> Desc:
+    desc = Desc.from_name("typicons", root)
     metadata = requests.get(
         "https://raw.githubusercontent.com/stephenhutchings/typicons.font/master/src/font/typicons.json"
     ).json()
@@ -155,7 +163,7 @@ def typicons() -> Desc:
         "https://github.com/stephenhutchings/typicons.font/raw/master/src/font/typicons.ttf"
     ).content
 
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {
                 "family": "typicons",
@@ -165,14 +173,14 @@ def typicons() -> Desc:
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def codicon() -> Desc:
-    desc = Desc("codicon", "codicon.json", "codicon.ttf")
+def codicon(root: Path) -> Desc:
+    desc = Desc.from_name("codicon", root)
     metadata = requests.get(
         "https://github.com/microsoft/vscode-codicons/raw/main/dist/codicon.css"
     ).text
@@ -188,21 +196,21 @@ def codicon() -> Desc:
         re.MULTILINE,
     ):
         names[match.group(1)] = int(match.group(2), 16)
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": "codicon", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def awesome() -> Desc:
-    desc = Desc("awesome", "awesome.json", "awesome.ttf")
+def awesome(path: Path) -> Desc:
+    desc = Desc.from_name("awesome", path)
     # inspect https://fontawesome.com to get this URLs
     version = "6.4.0"
     font = requests.get(
@@ -220,21 +228,21 @@ def awesome() -> Desc:
         re.MULTILINE,
     ):
         names[match.group(1)] = int(match.group(2), 16)
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": "Font Awesome 6 Pro", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def weather() -> Desc:
-    desc = Desc("weather", "weather.json", "weather.ttf")
+def weather(root: Path) -> Desc:
+    desc = Desc.from_name("weather", root)
     font = requests.get(
         "https://github.com/erikflowers/weather-icons/raw/master/font/weathericons-regular-webfont.ttf"
     ).content
@@ -249,21 +257,21 @@ def weather() -> Desc:
         re.MULTILINE,
     ):
         names[match.group(1)] = int(match.group(2), 16)
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": "Weather Icons", "names": names},
             meta_file,
             indent=2,
         )
 
-    with open(desc.font, "wb") as font_file:
+    with desc.font.open("wb") as font_file:
         font_file.write(font)
 
     return desc
 
 
-def notoemoji() -> Desc:
-    desc = Desc("notoemoji", "notoemoji.json", "notoemoji.ttf")
+def notoemoji(root: Path) -> Desc:
+    desc = Desc.from_name("notoemoji", root)
     font = Font(desc.font)
 
     names: Dict[str, int] = {}
@@ -285,7 +293,7 @@ def notoemoji() -> Desc:
             continue
         names[name] = codepoint
 
-    with open(desc.metadata, "w") as meta_file:
+    with desc.metadata.open("w") as meta_file:
         json.dump(
             {"family": font.name["family"], "names": names},
             meta_file,
@@ -369,8 +377,8 @@ class Font:
         - https://learn.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
     """
 
-    def __init__(self, path: str):
-        reader = Reader(Path(path).expanduser().open("rb"))
+    def __init__(self, path: Path):
+        reader = Reader(path.expanduser().open("rb"))
         self.reader = reader
 
         reader.read_u32()  # sfntVersion
@@ -415,7 +423,7 @@ class Font:
         self.reader.seek(cmap.offset)
         self.reader.read_u16()  # version
 
-        # find unicode subtable
+        # find unicode sub-table
         unicode_table_offset = 0
         subtables: List[Tuple[int, int, int]] = []
         num_tables = self.reader.read_u16()
@@ -432,7 +440,7 @@ class Font:
                 f"Only support unicode (0) format (4) cmap tables: {subtables}"
             )
 
-        # subtable header
+        # sub-table header
         self.reader.seek(unicode_table_offset)
         subtable_format = self.reader.read_u16()
         if subtable_format != 12:  # segmented coverage
@@ -463,7 +471,7 @@ class Font:
         version = self.reader.read_fixed()
         if version != 2:
             return {}
-        self.reader.read(28)  # skeep header
+        self.reader.read(28)  # skip header
 
         # https://learn.microsoft.com/en-us/typography/opentype/spec/post#version-20
         glyph_count = self.reader.read_u16()
@@ -533,6 +541,8 @@ class Font:
 
 def main() -> None:
     descriptions: List[Any] = []
+    root = Path("fonts")
+    root.mkdir(exist_ok=True)
     for updater in [
         material,
         fluent,
@@ -545,8 +555,14 @@ def main() -> None:
         notoemoji,
     ]:
         print(updater.__name__)
-        desc = updater()
-        descriptions.append(desc._asdict())
+        desc = updater(root)
+        descriptions.append(
+            {
+                "name": desc.name,
+                "metadata": str(desc.metadata),
+                "font": str(desc.font),
+            }
+        )
 
     with open("descriptions.json", "w") as all_file:
         json.dump(descriptions, all_file, indent=2)
