@@ -1,13 +1,18 @@
 #!/usr/bin/env python
 # pyright: strict
 from __future__ import annotations
+
+import argparse
+import io
 import json
 import re
-import requests
 import struct
+import tarfile
 import unicodedata
 from pathlib import Path
-from typing import Dict, Optional, NamedTuple, BinaryIO, Any, Tuple, List
+from typing import Any, BinaryIO, Dict, List, NamedTuple, Optional, Tuple
+
+import requests
 
 
 class Desc(NamedTuple):
@@ -179,20 +184,18 @@ def typicons(root: Path) -> Desc:
     return desc
 
 
-def codicon(root: Path) -> Desc:
+def codicons(root: Path) -> Desc:
     desc = Desc.from_name("codicon", root)
-    metadata = requests.get(
-        "https://github.com/microsoft/vscode-codicons/raw/main/dist/codicon.css"
-    ).text
-    font = requests.get(
-        "https://github.com/microsoft/vscode-codicons/raw/main/dist/codicon.ttf"
-    ).content
+    metadata, font = npm_get(
+        "@vscode/codicons",
+        ["dist/codicon.css", "dist/codicon.ttf"],
+    )
 
     # .codicon-gist-new:before { content: "\ea60" }
     names: Dict[str, int] = {}
     for match in re.finditer(
         '^\\.codicon-([^:]+):.*{\\s+content:\\s+"\\\\(.*)"',
-        metadata,
+        metadata.decode(),
         re.MULTILINE,
     ):
         names[match.group(1)] = int(match.group(2), 16)
@@ -312,6 +315,22 @@ def camel_to_dash(value: str) -> str:
     )
 
 
+def npm_get(name: str, files: list[str]) -> list[bytes]:
+    """Fetch latest npm package with the provided name and extract files"""
+    desc = requests.get(f"https://registry.npmjs.org/{name}/latest").json()
+    tarball_url = desc["dist"]["tarball"]
+    tarball_file = io.BytesIO(requests.get(tarball_url).content)
+    tar = tarfile.open(fileobj=tarball_file)
+    result: list[bytes] = []
+    for file in files:
+        file = f"package/{file}"
+        data = tar.extractfile(file)
+        if data is None:
+            raise ValueError(f"[npm] {name}: file not found {file}")
+        result.append(data.read())
+    return result
+
+
 class Reader:
     def __init__(self, file: BinaryIO):
         self.file = file
@@ -322,7 +341,7 @@ class Reader:
         return self.file.read(size)
 
     def read_string(self, size: int, at: Optional[int] = None) -> str:
-        return self.read(size, at).decode()
+        return self.read(size, at).decode(errors="backslashreplace")
 
     def seek(self, target: int, whence: int = 0) -> None:
         self.file.seek(target, whence)
@@ -378,7 +397,8 @@ class Font:
     """
 
     def __init__(self, path: Path):
-        reader = Reader(path.expanduser().open("rb"))
+        self.path = path.expanduser()
+        reader = Reader(self.path.open("rb"))
         self.reader = reader
 
         reader.read_u32()  # sfntVersion
@@ -433,11 +453,10 @@ class Font:
             subtable_offset = self.reader.read_u32()
             subtables.append((platform_id, encoding_id, subtable_offset))
             if platform_id == 0 and encoding_id == 4:
-                unicode_table_offset = subtable_offset + cmap.offset
-        # breakpoint()
+                unicode_table_offset = cmap.offset + subtable_offset
         if not unicode_table_offset:
             raise ValueError(
-                f"Only support unicode (0) format (4) cmap tables: {subtables}"
+                f"{self.path}: Only support unicode (0) format (4) cmap tables: {subtables}"
             )
 
         # sub-table header
@@ -445,7 +464,7 @@ class Font:
         subtable_format = self.reader.read_u16()
         if subtable_format != 12:  # segmented coverage
             raise ValueError(
-                f"Only suppor segmented coverage (12) cmap table: {subtable_format}"
+                f"{self.path}: Only suppor segmented coverage (12) cmap table: {subtable_format}"
             )
         self.reader.read_u16()  # reserved
         self.reader.read_u32()  # length
@@ -540,32 +559,46 @@ class Font:
 
 
 def main() -> None:
-    descriptions: List[Any] = []
+    fonts = {
+        "material": material,
+        "fluent": fluent,
+        "phosphor": phosphor,
+        "remix": remix,
+        "codicons": codicons,
+        "awesome": awesome,
+        "weather": weather,
+        "typicons": typicons,
+        "notoemoji": notoemoji,
+    }
+    parser = argparse.ArgumentParser()
+    parser.add_argument("font", help="font name", nargs="*")
+    opts = parser.parse_args()
+
+    if opts.font:
+        font_updaters = [fonts[name] for name in opts.font]
+    else:
+        font_updaters = fonts.values()
+
+    descriptions_path = Path("descriptions.json")
+    descriptions: dict[str, Any] = {}
+    if descriptions_path.exists():
+        descriptions = {
+            desc["name"]: desc for desc in json.loads(descriptions_path.read_text())
+        }
+
     root = Path("fonts")
     root.mkdir(exist_ok=True)
-    for updater in [
-        material,
-        fluent,
-        phosphor,
-        remix,
-        codicon,
-        awesome,
-        weather,
-        typicons,
-        notoemoji,
-    ]:
+    for updater in font_updaters:
         print(updater.__name__)
         desc = updater(root)
-        descriptions.append(
-            {
-                "name": desc.name,
-                "metadata": str(desc.metadata),
-                "font": str(desc.font),
-            }
-        )
+        descriptions[desc.name] = {
+            "name": desc.name,
+            "metadata": str(desc.metadata),
+            "font": str(desc.font),
+        }
 
-    with open("descriptions.json", "w") as all_file:
-        json.dump(descriptions, all_file, indent=2)
+    with descriptions_path.open("w") as all_file:
+        json.dump(list(descriptions.values()), all_file, indent=2)
 
 
 if __name__ == "__main__":

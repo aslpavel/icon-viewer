@@ -1,5 +1,10 @@
 [
   {
+    "name": "codicon",
+    "metadata": "fonts/codicon.json",
+    "font": "fonts/codicon.ttf"
+  },
+  {
     "name": "material",
     "metadata": "fonts/material.json",
     "font": "fonts/material.ttf"
@@ -18,11 +23,6 @@
     "name": "remix",
     "metadata": "fonts/remix.json",
     "font": "fonts/remix.ttf"
-  },
-  {
-    "name": "codicon",
-    "metadata": "fonts/codicon.json",
-    "font": "fonts/codicon.ttf"
   },
   {
     "name": "awesome",
