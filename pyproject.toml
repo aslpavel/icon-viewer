@@ -1,0 +1,25 @@
+[project]
+name = "icon_provider"
+version = "0.1.0"
+description = "Font based icon provider"
+authors = [{ name = "Pavel Aslanov", email = "asl.pavel@gmail.com" }]
+dependencies = ["requests"]
+
+[project.urls]
+Homepage = "https://aslpavel.github.io/icon-viewer"
+Repository = "https://github.com/aslpavel/icon-viewer.git"
+
+[project.scripts]
+icon-provider = "icon_provider.__main__:main"
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["icon_provider"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
