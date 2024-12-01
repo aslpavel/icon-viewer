@@ -30,12 +30,6 @@
     "font": "fonts/codicon.ttf"
   },
   {
-    "name": "tabler",
-    "family": "tabler-icons",
-    "metadata": "fonts/tabler.json",
-    "font": "fonts/tabler.ttf"
-  },
-  {
     "name": "awesome",
     "family": "Font Awesome 6 Pro Regular",
     "metadata": "fonts/awesome.json",

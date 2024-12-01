@@ -7,7 +7,7 @@ import sqlite3
 import zlib
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 from .ufont import Font
 
@@ -51,14 +51,14 @@ class IconStore:
 
     def __init__(
         self,
-        descs_path: Optional[Path] = None,
-        db_path: Optional[Path] = None,
+        descs_path: Path | None = None,
+        db_path: Path | None = None,
     ) -> None:
         self.descs_path = descs_path or DESCS_PATH
         self.db_path = db_path or DB_PATH
         self._conn = sqlite3.connect(self.db_path)
         self._conn.executescript(CREATE_TABLES)
-        self._font_descs: Optional[dict[int, FontDesc]] = None
+        self._font_descs: dict[int, FontDesc] | None = None
         if not self.get_icon_count():
             self.update()
 
@@ -72,7 +72,7 @@ class IconStore:
         result = self._conn.execute("SELECT name FROM icons").fetchall()
         return [fields[0] for fields in result]
 
-    def get_icon(self, name: str) -> Optional[Icon]:
+    def get_icon(self, name: str) -> Icon | None:
         """Get single icon by its name"""
         curr = self._conn.execute("SELECT * FROM icons WHERE name=?", (name,))
         icon_attrs = curr.fetchone()

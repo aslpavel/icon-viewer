@@ -8,9 +8,7 @@ import re
 import tarfile
 import unicodedata
 from pathlib import Path
-from typing import Callable, NamedTuple, Optional
-
-import requests
+from typing import Callable, NamedTuple, Any
 
 from .ufont import Font
 
@@ -44,9 +42,14 @@ class FontData:
         font_data: bytes,
     ) -> None:
         self.name = name
-        self.icon_to_codepoint = icon_to_codepoint
         self.font_data = font_data
         font = Font(self.font_data)
+        self.icon_to_codepoint = {}
+        for icon, codepoint in icon_to_codepoint.items():
+            glyph = font.glyph_by_codepoint(codepoint)
+            if glyph is None or glyph.contours_count == 0:
+                continue
+            self.icon_to_codepoint[icon] = codepoint
         self.family = font.name.family
 
     def __repr__(self) -> str:
@@ -66,7 +69,7 @@ class FontData:
             font_file.write(self.font_data)
 
     @staticmethod
-    def load(name: str, root: Path) -> Optional[FontData]:
+    def load(name: str, root: Path) -> FontData | None:
         metadata_path = root / f"{name}.json"
         if not metadata_path.exists():
             return None
@@ -91,12 +94,13 @@ class FontData:
 
 
 def fetch_material() -> FontData:
-    metadata = requests.get(
-        "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/meta.json"
-    ).json()
-    font_data = requests.get(
+    metadata = http_get(
+        "https://raw.githubusercontent.com/Templarian/MaterialDesign/master/meta.json",
+        json=True,
+    )
+    font_data = http_get(
         "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
-    ).content
+    )
 
     icon_to_codepoint: dict[str, int] = {}
     for meta in metadata:
@@ -108,12 +112,13 @@ def fetch_material() -> FontData:
 
 
 def fetch_fluent() -> FontData:
-    metadata = requests.get(
-        "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.json"
-    ).json()
-    font_data = requests.get(
+    metadata = http_get(
+        "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.json",
+        json=True,
+    )
+    font_data = http_get(
         "https://github.com/microsoft/fluentui-system-icons/raw/main/fonts/FluentSystemIcons-Resizable.ttf"
-    ).content
+    )
 
     icon_to_codepoint: dict[str, int] = {}
     re_name = re.compile("ic_fluent_(.+)_20_(filled|regular)")
@@ -132,12 +137,12 @@ def fetch_fluent() -> FontData:
 
 
 def fetch_phosphor() -> FontData:
-    metadata = requests.get(
+    metadata = http_get(
         "https://github.com/phosphor-icons/web/raw/master/src/regular/style.css"
-    ).text
-    font_data = requests.get(
+    ).decode()
+    font_data = http_get(
         "https://github.com/phosphor-icons/web/raw/master/src/regular/Phosphor.ttf"
-    ).content
+    )
 
     icon_to_codepoint: dict[str, int] = {}
     for match in re.finditer(
@@ -151,12 +156,12 @@ def fetch_phosphor() -> FontData:
 
 
 def fetch_remix() -> FontData:
-    metadata = requests.get(
+    metadata = http_get(
         "https://github.com/Remix-Design/RemixIcon/raw/master/fonts/remixicon.css"
-    ).text
-    font_data = requests.get(
+    ).decode()
+    font_data = http_get(
         "https://github.com/Remix-Design/RemixIcon/raw/master/fonts/remixicon.ttf"
-    ).content
+    )
 
     # .ri-arrow-left-right-fill:before { content: "\ea61"; }
     icon_to_codepoint: dict[str, int] = {}
@@ -175,12 +180,13 @@ def fetch_remix() -> FontData:
 
 
 def fetch_typicons() -> FontData:
-    metadata = requests.get(
-        "https://raw.githubusercontent.com/stephenhutchings/typicons.font/master/src/font/typicons.json"
-    ).json()
-    font_data = requests.get(
+    metadata = http_get(
+        "https://raw.githubusercontent.com/stephenhutchings/typicons.font/master/src/font/typicons.json",
+        json=True,
+    )
+    font_data = http_get(
         "https://github.com/stephenhutchings/typicons.font/raw/master/src/font/typicons.ttf"
-    ).content
+    )
 
     return FontData("typicons", metadata, font_data)
 
@@ -205,13 +211,13 @@ def fetch_codicons() -> FontData:
 
 def fetch_awesome() -> FontData:
     # inspect https://fontawesome.com to get this URLs
-    version = "6.4.0"
-    font_data = requests.get(
+    version = "6.5.1"
+    font_data = http_get(
         f"https://site-assets.fontawesome.com/releases/v{version}/webfonts/fa-regular-400.ttf"
-    ).content
-    metadata = requests.get(
+    )
+    metadata = http_get(
         f"https://site-assets.fontawesome.com/releases/v{version}/css/all.css"
-    ).text
+    ).decode()
 
     # single line like .fa-fill-drip:before{content:"\f576"}
     icon_to_codepoint: dict[str, int] = {}
@@ -226,12 +232,12 @@ def fetch_awesome() -> FontData:
 
 
 def fetch_weather() -> FontData:
-    font_data = requests.get(
+    font_data = http_get(
         "https://github.com/erikflowers/weather-icons/raw/master/font/weathericons-regular-webfont.ttf"
-    ).content
-    metadata = requests.get(
+    )
+    metadata = http_get(
         "https://github.com/erikflowers/weather-icons/raw/master/css/weather-icons.css"
-    ).text
+    ).decode()
 
     icon_to_codepoint: dict[str, int] = {}
     for match in re.finditer(
@@ -249,9 +255,9 @@ def fetch_notoemoji() -> FontData:
     #   - GET https://fonts.google.com/download/list?family=Noto%20Emoji
     #   - first line is garbage for some reason the rest is JSON
     #   - find "filename": "NotoEmoji-VariableFont_wght.ttf"
-    font_data = requests.get(
+    font_data = http_get(
         "https://github.com/google/fonts/raw/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf"
-    ).content
+    )
 
     font = Font(font_data)
     icon_to_codepoint: dict[str, int] = {}
@@ -262,7 +268,7 @@ def fetch_notoemoji() -> FontData:
         "variation-selector-16",
     }
     bad_name_regex = re.compile("^u(ni)?([0-9A-Fa-f]+)$")
-    for name, codepoint in font.name_by_codepoint().items():
+    for name, codepoint in font.codepoint_by_name().items():
         bad_match = bad_name_regex.match(name)
         if bad_match:
             char = chr(int(bad_match.group(2), 16))
@@ -276,12 +282,33 @@ def fetch_notoemoji() -> FontData:
     return FontData("notoemoji", icon_to_codepoint, font_data)
 
 
+def fetch_tabler() -> FontData:
+    font_data = npm_get("@tabler/icons-webfont", ["dist/fonts/tabler-icons.ttf"])[0]
+
+    font = Font(font_data)
+    icon_to_codepoint = font.codepoint_by_name()
+    return FontData("tabler", icon_to_codepoint, font_data)
+
+
+def fetch_tabler_filled() -> FontData:
+    font_data = npm_get(
+        "@tabler/icons-webfont", ["dist/fonts/tabler-icons-filled.ttf"]
+    )[0]
+
+    font = Font(font_data)
+    icon_to_codepoint = font.codepoint_by_name()
+    return FontData("tabler-filled", icon_to_codepoint, font_data)
+
+
 FONT_FETCHERS: dict[str, Callable[[], FontData]] = {
     "material": fetch_material,
     "fluent": fetch_fluent,
     "phosphor": fetch_phosphor,
     "remix": fetch_remix,
     "codicon": fetch_codicons,
+    "tabler": fetch_tabler,
+    # conflicts with `tabler`
+    # "tabler-filled": fetch_tabler_filled,
     "awesome": fetch_awesome,
     "weather": fetch_weather,
     "typicons": fetch_typicons,
@@ -301,9 +328,9 @@ def camel_to_kebab(value: str) -> str:
 
 def npm_get(name: str, files: list[str]) -> list[bytes]:
     """Fetch latest npm package with the provided name and extract files"""
-    desc = requests.get(f"https://registry.npmjs.org/{name}/latest").json()
+    desc = http_get(f"https://registry.npmjs.org/{name}/latest", json=True)
     tarball_url = desc["dist"]["tarball"]
-    tarball_file = io.BytesIO(requests.get(tarball_url).content)
+    tarball_file = io.BytesIO(http_get(tarball_url))
     tar = tarfile.open(fileobj=tarball_file)
     result: list[bytes] = []
     for file in files:
@@ -313,3 +340,12 @@ def npm_get(name: str, files: list[str]) -> list[bytes]:
             raise ValueError(f"[npm] {name}: file not found {file}")
         result.append(data.read())
     return result
+
+
+def http_get(url: str, json: bool = False) -> Any:
+    import requests
+
+    response = requests.get(url)
+    if json:
+        return response.json()
+    return response.content

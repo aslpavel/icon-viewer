@@ -38,25 +38,25 @@ def subcommand_update(opts: argparse.Namespace) -> None:
     font_root = root / FONT_DIR
     descs_path = root / DESC_FILE
 
-    font_descs: list[dict[str, str]] = []
-    font_name_len = max(map(len, FONT_FETCHERS))
-    for name, fetcher in FONT_FETCHERS.items():
-        with timer(f"[fetching] {name.ljust(font_name_len)} "):
-            font_data = fetcher()
-            font_data_prev = FontData.load(name, font_root)
-            if font_data_prev is None or font_data.hash() != font_data_prev.hash():
-                font_data.save(font_root)
-            font_descs.append(
-                {
-                    "name": name,
-                    "family": font_data.family,
-                    "metadata": os.path.join(FONT_DIR, f"{name}.json"),
-                    "font": os.path.join(FONT_DIR, f"{name}.ttf"),
-                }
-            )
-
-    with descs_path.open("w") as desc_file:
-        json.dump(font_descs, desc_file, indent=2)
+    if not opts.db_only:
+        font_descs: list[dict[str, str]] = []
+        font_name_len = max(map(len, FONT_FETCHERS))
+        for name, fetcher in FONT_FETCHERS.items():
+            with timer(f"[fetching] {name.ljust(font_name_len)} "):
+                font_data = fetcher()
+                font_data_prev = FontData.load(name, font_root)
+                if font_data_prev is None or font_data.hash() != font_data_prev.hash():
+                    font_data.save(font_root)
+                font_descs.append(
+                    {
+                        "name": name,
+                        "family": font_data.family,
+                        "metadata": os.path.join(FONT_DIR, f"{name}.json"),
+                        "font": os.path.join(FONT_DIR, f"{name}.ttf"),
+                    }
+                )
+        with descs_path.open("w") as desc_file:
+            json.dump(font_descs, desc_file, indent=2)
 
     with timer("[db] updating database "):
         icon_store = IconStore(descs_path)
@@ -84,11 +84,27 @@ def subcommand_select(opts: argparse.Namespace) -> None:
     icons_format(opts.format, selected)
 
 
+def icons_format_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=["svg-path", "svg", "json"],
+        default="svg-path",
+        help="format of the output",
+    )
+
+
 def icons_format(format: str, icons: list[Icon]) -> None:
     match format:
-        case "svg":
+        case "svg-path":
             for icon in icons:
                 print(icon.svg)
+        case "svg":
+            for icon in icons:
+                print('<svg width="100" height="100" viewBox="0 0 100 100"')
+                print('     xmlns="http://www.w3.org/2000/svg">')
+                print(f'<path id="{icon.name}" d="{icon.svg}"/>')
+                print("</svg>")
         case "json":
             descs: dict[str, dict[str, Any]] = {}
             for icon in icons:
@@ -114,28 +130,21 @@ def main() -> None:
     parser_update = subparsers.add_parser(
         "update", description="fetch and update fonts"
     )
+    parser_update.add_argument(
+        "--db-only",
+        action="store_true",
+        help="update database without fetching fonts",
+    )
     parser_update.set_defaults(fn=subcommand_update)
 
     parser_get = subparsers.add_parser("get", description="get icon")
-    parser_get.add_argument(
-        "-f",
-        "--format",
-        choices=["svg", "json"],
-        default="svg",
-        help="format of the output",
-    )
+    icons_format_arg(parser_get)
     parser_get.add_argument("icon_name", nargs="+", help="icon name")
     parser_get.set_defaults(fn=subcommand_get)
 
-    parser_get = subparsers.add_parser("select", description="select icon")
-    parser_get.add_argument(
-        "-f",
-        "--format",
-        choices=["svg", "json"],
-        default="svg",
-        help="format of the output",
-    )
-    parser_get.set_defaults(fn=subcommand_select)
+    parser_select = subparsers.add_parser("select", description="select icon")
+    icons_format_arg(parser_select)
+    parser_select.set_defaults(fn=subcommand_select)
 
     opts = parser.parse_args()
     opts.fn(opts)

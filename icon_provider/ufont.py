@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Micro font parser"""
 
 # pyright: strict
@@ -9,7 +10,7 @@ import sys
 import math
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Optional, Protocol, Iterator, TypeVar
+from typing import Any, Callable, NamedTuple, Protocol, Iterator
 
 
 class OutlineBuilder(Protocol):
@@ -41,8 +42,8 @@ class BBoxBuilder:
     __slots__ = ["min", "max"]
 
     def __init__(self):
-        self.min: Optional[Point] = None
-        self.max: Optional[Point] = None
+        self.min: Point | None = None
+        self.max: Point | None = None
 
     def __repr__(self) -> str:
         if self.min is None or self.max is None:
@@ -89,7 +90,7 @@ class SVGOutlineBuilder:
         self,
         relative: bool = False,
         precision: int = 2,
-        tr: Optional[Transform] = None,
+        tr: Transform | None = None,
     ) -> None:
         self._file = io.StringIO()
         self._relative = relative
@@ -100,40 +101,39 @@ class SVGOutlineBuilder:
     def __str__(self) -> str:
         return self._file.getvalue()
 
-    def _write_point(self, p: Point) -> Point:
+    def _write_point(self, p: Point, sep: bool) -> Point:
         p = self._tr(p)
         pp = p - self._point_prev if self._relative else p
 
         x = round(pp.x, self._precision)
         y = round(pp.y, self._precision)
-        sep = "," if y >= 0 else ""
-        self._file.write(f"{x:g}{sep}{y:g}")
+        if sep and x >= 0:
+            self._file.write(" ")
+        self._file.write(f"{x:g}")
+        if y >= 0:
+            self._file.write(",")
+        self._file.write(f"{y:g}")
 
         return p
 
-    def _write_sep_point(self, p: Point) -> Point:
-        if round(p.x, self._precision) >= 0:
-            self._file.write(" ")
-        return self._write_point(p)
-
     def move_to(self, p: Point) -> None:
         self._file.write("m" if self._relative else "M")
-        self._point_prev = self._write_point(p)
+        self._point_prev = self._write_point(p, False)
 
     def line_to(self, p: Point) -> None:
         self._file.write("l" if self._relative else "L")
-        self._point_prev = self._write_point(p)
+        self._point_prev = self._write_point(p, False)
 
     def quad_to(self, p1: Point, p2: Point) -> None:
         self._file.write("q" if self._relative else "Q")
-        self._write_point(p1)
-        self._point_prev = self._write_sep_point(p2)
+        self._write_point(p1, False)
+        self._point_prev = self._write_point(p2, True)
 
     def cubic_to(self, p1: Point, p2: Point, p3: Point) -> None:
         self._file.write("c" if self._relative else "C")
-        self._write_point(p1)
-        self._write_sep_point(p2)
-        self._point_prev = self._write_sep_point(p3)
+        self._write_point(p1, False)
+        self._write_point(p2, True)
+        self._point_prev = self._write_point(p3, True)
 
     def close(self) -> None:
         self._file.write("Z")
@@ -237,9 +237,6 @@ class GlyphPoint(NamedTuple):
     last: bool  # last point in the contour
 
 
-OB = TypeVar("OB", bound=OutlineBuilder)
-
-
 class Glyph:
     __slots__ = [
         "font",
@@ -272,7 +269,7 @@ class Glyph:
     def to_svg_path(
         self,
         relative: bool = False,
-        tr: Optional[Transform] = None,
+        tr: Transform | None = None,
     ) -> str:
         """Generate 100x100 SVG path for the glyph"""
 
@@ -296,7 +293,11 @@ class Glyph:
         )
         return str(self.build_outline(SVGOutlineBuilder(relative=relative, tr=tr)))
 
-    def build_outline(self, builder: OB, tr: Optional[Transform] = None) -> OB:
+    def build_outline[OB: OutlineBuilder](
+        self,
+        builder: OB,
+        tr: Transform | None = None,
+    ) -> OB:
         """Build outline for the glyph"""
         if self.contours_count >= 0:
             self._simple_outline(builder, tr)
@@ -304,7 +305,7 @@ class Glyph:
             self._composite_outline(builder, tr)
         return builder
 
-    def bbox(self) -> Optional[tuple[Point, Point]]:
+    def bbox(self) -> tuple[Point, Point] | None:
         """BBox in the glyph is not always correct (i.e fluent icons)
 
         This is an approximate bbox based on all points (real bbox can be smaller)
@@ -328,7 +329,7 @@ class Glyph:
     def _simple_outline(
         self,
         builder: OutlineBuilder,
-        tr: Optional[Transform] = None,
+        tr: Transform | None = None,
     ) -> None:
         """Build simple outline
 
@@ -339,9 +340,9 @@ class Glyph:
             - [on0, off0, off1, on1] - quad(on0, off0, (off0+off1)/2) quad((off0+off1)/2, off1, on1)
         """
         tr = tr or Transform.identity()
-        first_on_curve: Optional[Point] = None
-        first_off_curve: Optional[Point] = None
-        last_off_curve: Optional[Point] = None
+        first_on_curve: Point | None = None
+        first_off_curve: Point | None = None
+        last_off_curve: Point | None = None
         for point in self._simple_outline_points():
             if first_on_curve is None:
                 if point.on_curve:
@@ -483,7 +484,7 @@ class Glyph:
     def _composite_outline(
         self,
         builder: OutlineBuilder,
-        tr: Optional[Transform] = None,
+        tr: Transform | None = None,
     ) -> None:
         tr = tr or Transform.identity()
 
@@ -552,11 +553,9 @@ class FontTable(NamedTuple):
         return Reader(memoryview(font.data[self.offset : self.offset + self.length]))
 
 
-F = TypeVar("F", bound="Font")
-T = TypeVar("T")
-
-
-def cached_table(name: str) -> Callable[[Callable[[F], T]], Callable[[F], T]]:
+def cached_table[F: Font, T](
+    name: str,
+) -> Callable[[Callable[[F], T]], Callable[[F], T]]:
     def cached_table_named(parse_table: Callable[[F], T]) -> Callable[[F], T]:
         def cached_parse_table(font: F) -> T:
             table = font.cached_tables.get(name)
@@ -568,6 +567,11 @@ def cached_table(name: str) -> Callable[[Callable[[F], T]], Callable[[F], T]]:
         return cached_parse_table
 
     return cached_table_named
+
+
+SPECIMEN_SIZE = 32
+SPECIMEN_PADD = 6
+SPECIMEN_COLS = 35
 
 
 class Font:
@@ -624,7 +628,55 @@ class Font:
             path = Path(path)
         return cls(path.expanduser().read_bytes())
 
-    def glyph_by_codepoint(self, codepoint: int) -> Optional[Glyph]:
+    def info(self) -> dict[str, Any]:
+        return {
+            "family": self.name.family,
+            "subfamily": self.name.subfamily,
+            "version": self.name.version,
+            "glyph_count": self.glyph_count,
+            "post_count": len(self.parse_post().glyph_id_to_name),
+            "units_per_em": self.head.units_per_em,
+            "modified_dt": self.head.modified_dt.isoformat(),
+            "tables": {name: table.length for name, table in self.tables.items()},
+        }
+
+    def specimen(
+        self,
+        size: int | None = None,
+        columns: int | None = None,
+        padding: int | None = None,
+    ) -> str:
+        """Generate SVG path specimen of all glyphs"""
+        size = size or SPECIMEN_SIZE
+        columns = columns or SPECIMEN_COLS
+        padding = padding or SPECIMEN_PADD
+
+        glyph_table = self.parse_glyf()
+        if glyph_table is None or self.glyph_count == 0:
+            return ""
+
+        buf = io.StringIO()
+        buf.write("M0,0h1v1h-1z")  # mark top-left corner
+        scale = size / 100
+        size += padding
+        row, col = 0, 0
+        glyphs = filter(lambda glyph: glyph.contours_count != 0, glyph_table.glyphs)
+        for index, glyph in enumerate(glyphs):
+            row, col = divmod(index, columns)
+            tr = (
+                Transform.identity()
+                .translate(padding + col * size, padding + row * size)
+                .scale(scale, scale)
+            )
+            buf.write(glyph.to_svg_path(tr=tr))
+            buf.write("\n")
+        # mark bottom-right corner
+        mark_x = padding + columns * size
+        mark_y = padding + (row + 1) * size
+        buf.write(f"M{mark_x},{mark_y}h1v1h-1z")
+        return buf.getvalue()
+
+    def glyph_by_codepoint(self, codepoint: int) -> Glyph | None:
         """Get glyph corresponding to the codepoint"""
         if self.font_type != "ttf":
             raise ValueError("Only TTF outlines are supported for now")
@@ -638,7 +690,7 @@ class Font:
         return glyf.get(glyph_id)
 
     @cached_table("name_to_codpoint")
-    def name_by_codepoint(self) -> dict[str, int]:
+    def codepoint_by_name(self) -> dict[str, int]:
         """Mapping from names to codepoints"""
         cmap = self.parse_cmap()
         post = self.parse_post()
@@ -693,7 +745,7 @@ class Font:
         )
 
     @cached_table("loca")
-    def parse_loca(self) -> Optional[list[int]]:
+    def parse_loca(self) -> list[int] | None:
         """Glyph index to location table (TTF)
 
         Reference: https://learn.microsoft.com/en-us/typography/opentype/spec/loca
@@ -712,7 +764,7 @@ class Font:
         return [mult * read_index() for _ in range(self.glyph_count + 1)]
 
     @cached_table("glyf")
-    def parse_glyf(self) -> Optional[GlyfTable]:
+    def parse_glyf(self) -> GlyfTable | None:
         """Glyph data (TTF)
 
         Reference:
@@ -1015,14 +1067,14 @@ class HmtxTable(NamedTuple):
     bearings: list[int]
     number_of_metrics: int
 
-    def get_advance(self, glyph_id: int) -> Optional[int]:
+    def get_advance(self, glyph_id: int) -> int | None:
         if glyph_id >= self.number_of_metrics:
             return None
         if glyph_id < len(self.metrics):
             return self.metrics[glyph_id].advance
         return self.metrics[-1].advance
 
-    def get_side_bearing(self, glyph_id: int) -> Optional[int]:
+    def get_side_bearing(self, glyph_id: int) -> int | None:
         if glyph_id < len(self.metrics):
             return self.metrics[glyph_id].side_bearing
         else:
@@ -1042,8 +1094,7 @@ class GlyfTable:
         self.glyphs = glyphs
 
     def __iter__(self) -> Iterator[Glyph]:
-        for glyph in self.glyphs:
-            yield glyph
+        yield from self.glyphs
 
     def __len__(self) -> int:
         return len(self.glyphs)
@@ -1051,7 +1102,7 @@ class GlyfTable:
     def __getitem__(self, glyph_id: int) -> Glyph:
         return self.glyphs[glyph_id]
 
-    def get(self, glyph_id: int) -> Optional[Glyph]:
+    def get(self, glyph_id: int) -> Glyph | None:
         if 0 <= glyph_id < len(self.glyphs):
             return self.glyphs[glyph_id]
 
@@ -1075,19 +1126,19 @@ class Reader:
     def __repr__(self) -> str:
         return f"Reader(pos={self.file.tell()}, size={len(self.data)})"
 
-    def view(self, start: Optional[int] = 0, end: Optional[int] = None) -> Reader:
+    def view(self, start: int | None = 0, end: int | None = None) -> Reader:
         if start is None:
             start = self.file.tell()
         if end is None:
             end = len(self.data)
         return Reader(self.data[start:end])
 
-    def read(self, size: int, at: Optional[int] = None) -> bytes:
+    def read(self, size: int, at: int | None = None) -> bytes:
         if at is not None:
             self.file.seek(at)
         return self.file.read(size)
 
-    def read_string(self, size: int, at: Optional[int] = None) -> str:
+    def read_string(self, size: int, at: int | None = None) -> str:
         return self.read(size, at).decode(errors="backslashreplace")
 
     def advance(self, size: int) -> None:
@@ -1099,7 +1150,7 @@ class Reader:
     def tell(self) -> int:
         return self.file.tell()
 
-    def read_struct(self, format: str, at: Optional[int] = None) -> tuple[Any]:
+    def read_struct(self, format: str, at: int | None = None) -> tuple[Any, ...]:
         if at is not None:
             self.file.seek(at)
         st = struct.Struct(format)
@@ -1141,25 +1192,72 @@ class Reader:
 
 def main() -> None:
     import argparse
+    import json
 
     args = argparse.ArgumentParser(
         description="Render single glyph from the font by codepoint"
     )
     args.add_argument("font", help="font file")
-    args.add_argument("codepoint", help="codepoint")
+    args.add_argument(
+        "codepoint",
+        nargs="*",
+        help="codepoint (specimen/info is rendered if not set)",
+    )
+    args.add_argument(
+        "-f",
+        "--format",
+        default="json",
+        choices=["path", "json"],
+        help="output format",
+    )
     opts = args.parse_args()
 
     font = Font.from_path(opts.font)
-    if opts.codepoint.startswith("0x"):
-        codepoint = int(opts.codepoint[2:], 16)
-    else:
-        codepoint = int(opts.codepoint)
-
-    glyph = font.glyph_by_codepoint(codepoint)
-    if glyph is None:
-        sys.stderr.write(f"Font does not have codepoint: {codepoint}\n")
+    if not opts.codepoint:
+        match opts.format:
+            case "path":
+                print(font.specimen())
+            case "json":
+                print(json.dumps(font.info(), indent=2))
+            case format:
+                raise RuntimeError(f"Unkown format: {format}")
         return
-    print(glyph.to_svg_path())
+
+    for codepoint_str in opts.codepoint:
+        if codepoint_str.startswith("0x"):
+            codepoint = int(codepoint_str[2:], 16)
+        else:
+            codepoint = int(codepoint_str)
+
+        glyph = font.glyph_by_codepoint(codepoint)
+        if glyph is None:
+            sys.stderr.write(f"Font does not have codepoint: {codepoint}\n")
+            return
+
+        match opts.format:
+            case "path":
+                print(glyph.to_svg_path())
+            case "json":
+                cmap = font.parse_cmap()
+                post = font.parse_post()
+                hmtx = font.parse_hmtx()
+                glyph_id = cmap.codepoint_to_glyph_id[codepoint]
+                glyph_dict = {
+                    "glyph_id": glyph_id,
+                    "name": post.glyph_id_to_name.get(glyph_id),
+                    "bearing": hmtx.get_side_bearing(glyph_id),
+                    "advance": hmtx.get_advance(glyph_id),
+                    "bbox": (
+                        glyph.min_point.x,
+                        glyph.min_point.y,
+                        glyph.max_point.x,
+                        glyph.max_point.y,
+                    ),
+                    "path": glyph.to_svg_path(),
+                }
+                print(json.dumps(glyph_dict, indent=2))
+            case format:
+                raise RuntimeError(f"Unkown format: {format}")
 
 
 if __name__ == "__main__":
