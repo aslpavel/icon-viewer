@@ -8,7 +8,8 @@ import re
 import tarfile
 import unicodedata
 from pathlib import Path
-from typing import Callable, NamedTuple, Any
+from typing import NamedTuple, Any
+from collections.abc import Callable
 
 from .ufont import Font
 

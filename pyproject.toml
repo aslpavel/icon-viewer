@@ -21,5 +21,14 @@ packages = ["icon_provider"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
+extraPaths = ["../../libs/py"]
 venvPath = "."
 venv = ".venv"
+
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ANN", "UP"]
+ignore = ["ANN102", "ANN101", "ANN204", "ANN401", "UP038"]

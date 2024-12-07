@@ -20,7 +20,7 @@
         }
 
         window.addEventListener("load", async (event) => {
-            const fontDescsRequest = await fetch("descriptions-workaround.json");
+            const fontDescsRequest = await fetch("descriptions.json");
             const fontDescs = await fontDescsRequest.json();
             const iconSet = IconSet.fromFonts(
                 await Promise.all(fontDescs.map(Font.load))

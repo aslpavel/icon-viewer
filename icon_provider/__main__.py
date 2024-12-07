@@ -10,7 +10,8 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Iterator, Any
+from typing import Any
+from collections.abc import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from icon_provider.fetch import FONT_FETCHERS, FontData

@@ -1,49 +1,28 @@
 import { Iter } from "./iter.js";
-import {
-    Font as OpenFont,
-    parse as parseOpenFont,
-    type Glyph,
-} from "opentype.js";
+import { Font as UFont, Glyph as UGlyph } from "./ufont.js";
 
 export class Font {
     family: string;
-    font: OpenFont;
+    ufont: UFont;
     icons: Map<string, Icon>;
 
-    constructor(
-        family: string,
-        font: OpenFont,
-        nameToCodepoint: { [k: string]: number }
-    ) {
-        // match codepoints with glyphs frome the font
-        const codepointToGlyph = Iter.range(font.numGlyphs)
-            .filterMap((index) => {
-                const glyph = font.glyphs.get(index);
-                if (glyph?.unicode != null) {
-                    return [glyph.unicode, glyph] as const;
-                }
-            })
-            .collectMap();
+    constructor(family: string, ufont: UFont, nameToCodepoint: { [k: string]: number }) {
         const icons = new Iter(Object.entries(nameToCodepoint))
             .filterMap(([name, codepoint]) => {
-                const glyph = codepointToGlyph.get(codepoint);
+                const glyph = ufont.glyphByCodepoint(codepoint);
                 if (glyph) {
-                    return [name, new Icon(this, name, glyph)] as const;
+                    return [name, new Icon(this, name, codepoint, glyph)] as const;
                 }
             })
             .collectMap();
 
         this.family = family;
-        this.font = font;
+        this.ufont = ufont;
         this.icons = icons;
     }
 
     // Create and register font from description
-    static async load(fontDesc: {
-        name: string;
-        metadata: string;
-        font: string;
-    }): Promise<Font> {
+    static async load(fontDesc: { name: string; metadata: string; font: string }): Promise<Font> {
         const [metadata, fontData] = await Promise.all([
             fetch(fontDesc.metadata).then((r) => r.json()),
             fetch(fontDesc.font).then((r) => r.arrayBuffer()),
@@ -57,7 +36,7 @@ export class Font {
         style.innerText = `.${fontDesc.name} {font-family: "${fontDesc.name}"}`;
         document.getElementsByTagName("head")[0]!.appendChild(style);
 
-        const font = parseOpenFont(fontData);
+        const font = new UFont(fontData);
         return new Font(fontDesc.name, font, metadata.names);
     }
 
@@ -68,16 +47,16 @@ export class Font {
 
 class Icon {
     font: Font;
-    glyph: Glyph;
+    glyph: UGlyph;
     name: string;
     codepoint: number;
     content: string;
 
-    constructor(font: Font, name: string, glyph: Glyph) {
+    constructor(font: Font, name: string, codepoint: number, uglyph: UGlyph) {
         this.font = font;
-        this.glyph = glyph;
+        this.glyph = uglyph;
         this.name = name;
-        this.codepoint = glyph.unicode!;
+        this.codepoint = codepoint;
         this.content = String.fromCodePoint(this.codepoint);
     }
 
@@ -85,24 +64,12 @@ class Icon {
         return `${this.font.family}-${this.name}`;
     }
 
-    toSvgString(): string {
-        const glyph = this.glyph,
-            head = this.font.font.tables.head!,
-            padding = head.unitsPerEm / 10,
-            width = head.xMax - head.xMin + 2 * padding,
-            height = head.yMax - head.yMin + 2 * padding,
-            baseline = head.yMax + padding,
-            sideEm = Math.max(width, height);
-        const side = 128,
-            scale = side / sideEm,
-            size = head.unitsPerEm * scale,
-            x = ((sideEm - (glyph.advanceWidth ?? 0)) / 2) * scale,
-            y = baseline * scale;
-
+    toSVGString(): string {
+        const [svgPath, _bbox] = this.glyph.toSVGPath();
         return [
             '<?xml version="1.0"?>',
-            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${side} ${side}">`,
-            `  ${this.glyph.getPath(x, y, size).toSVG(3)}`,
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">',
+            `  <path d="${svgPath}"/>`,
             "</svg>",
         ].join("\n");
     }
@@ -122,10 +89,7 @@ export class IconSet {
 
     constructor(icons: Map<string, Map<string, Icon>>) {
         this.icons = icons;
-        this.size = new Iter(icons.values()).fold(
-            0,
-            (size, nameToIcon) => size + nameToIcon.size
-        );
+        this.size = new Iter(icons.values()).fold(0, (size, nameToIcon) => size + nameToIcon.size);
     }
 
     static fromFonts(fonts: Iterable<Font>) {
@@ -150,19 +114,14 @@ export class IconSet {
                     .collectMap();
                 return iconsFiltered.size == 0
                     ? null
-                    : ([fontFamily, iconsFiltered] as [
-                          string,
-                          Map<string, Icon>
-                      ]);
+                    : ([fontFamily, iconsFiltered] as [string, Map<string, Icon>]);
             })
             .collectMap();
         return new IconSet(icons);
     }
 
     find(iconFullName: string): Icon | null {
-        const match = iconFullName.match(
-            /(?<fontFamily>[^-]*)-(?<iconName>.*)/
-        );
+        const match = iconFullName.match(/(?<fontFamily>[^-]*)-(?<iconName>.*)/);
         if (!match) {
             return null;
         }
@@ -190,8 +149,7 @@ export class IconSet {
                     : ctx.iconUI.unfold
                 ).toHTMLElement()
             );
-            const fontNameCapital =
-                fontName.charAt(0).toUpperCase() + fontName.slice(1);
+            const fontNameCapital = fontName.charAt(0).toUpperCase() + fontName.slice(1);
             sectionHeader.appendChild(
                 document.createTextNode(`${fontNameCapital} (${names.size})`)
             );
@@ -220,9 +178,7 @@ export class IconSet {
             const sectionIcons = document.createElement("div");
             sectionIcons.classList.add("section-icons");
             sectionIcons.classList.add(fontName);
-            sectionIcons.style.display = ctx.sectionsExpanded.get(fontName)
-                ? ""
-                : "none";
+            sectionIcons.style.display = ctx.sectionsExpanded.get(fontName) ? "" : "none";
             new Iter(names).forEach(([name, icon]) => {
                 const iconElement = document.createElement("div");
                 const iconName = `${fontName}-${name}`;
@@ -252,7 +208,7 @@ function debounce<A extends any[]>(
     let timer: number;
     return (...args) => {
         clearTimeout(timer);
-        timer = setTimeout(() => {
+        timer = window.setTimeout(() => {
             func.apply(this, args);
         }, timeout);
     };
@@ -260,15 +216,13 @@ function debounce<A extends any[]>(
 
 function previewShow(icon: Icon): void {
     const previewSVG = document.getElementById("preview-svg")!;
-    previewSVG.innerHTML = icon.toSvgString();
+    previewSVG.innerHTML = icon.toSVGString();
 
     const previewName = document.getElementById("preview-name")!;
     const hexCodepoint = icon.codepoint.toString(16).toUpperCase();
     previewName.innerHTML = `${icon.fullName} <span class="codepoint">U+${hexCodepoint}<span>`;
 
-    const previewDialog = document.getElementById(
-        "preview-dialog"
-    ) as HTMLDialogElement;
+    const previewDialog = document.getElementById("preview-dialog") as HTMLDialogElement;
     previewDialog.dataset.name = icon.fullName;
     previewDialog.showModal();
 }
@@ -291,9 +245,7 @@ export function setup(iconSet: IconSet) {
     const ctx = { iconUI, sectionsExpanded };
 
     // preview dialog
-    const previewDialog = document.getElementById(
-        "preview-dialog"
-    ) as HTMLDialogElement;
+    const previewDialog = document.getElementById("preview-dialog") as HTMLDialogElement;
     previewDialog.addEventListener("click", (event) => {
         const dialogDims = previewDialog.getBoundingClientRect();
         if (
@@ -305,38 +257,28 @@ export function setup(iconSet: IconSet) {
             previewDialog.close();
         }
     });
-    const previewClose = document.getElementById(
-        "preview-close"
-    ) as HTMLButtonElement;
+    const previewClose = document.getElementById("preview-close") as HTMLButtonElement;
     previewClose.replaceChildren(ctx.iconUI.close.toHTMLElement());
     previewClose.addEventListener("click", () => {
         previewDialog.close();
     });
-    const previewCopyName = document.getElementById(
-        "preview-copy-name"
-    ) as HTMLButtonElement;
+    const previewCopyName = document.getElementById("preview-copy-name") as HTMLButtonElement;
     previewCopyName.replaceChildren(ctx.iconUI.clipboard.toHTMLElement());
     previewCopyName.addEventListener("click", () => {
         navigator.clipboard.writeText(previewDialog.dataset.name!);
     });
-    const previewCopySVG = document.getElementById(
-        "preview-copy-svg"
-    ) as HTMLButtonElement;
+    const previewCopySVG = document.getElementById("preview-copy-svg") as HTMLButtonElement;
     previewCopySVG.replaceChildren(ctx.iconUI.copySVG.toHTMLElement());
     previewCopySVG.addEventListener("click", () => {
         let icon = iconSet.find(previewDialog.dataset.name!)!;
-        navigator.clipboard.writeText(icon.toSvgString());
+        navigator.clipboard.writeText(icon.toSVGString());
     });
 
     // search
     const searchResult = document.getElementById("search-result")!;
-    const searchInput = document.getElementById(
-        "header-search-input"
-    ) as HTMLInputElement;
+    const searchInput = document.getElementById("header-search-input") as HTMLInputElement;
     const resultUpdate = () => {
-        let iconSetFilter = iconSet
-            .filter(searchInput.value)
-            .toHTMLElement(ctx);
+        let iconSetFilter = iconSet.filter(searchInput.value).toHTMLElement(ctx);
         searchResult.replaceChildren(iconSetFilter);
     };
     searchInput.addEventListener("input", debounce(resultUpdate));
@@ -359,9 +301,7 @@ export function setup(iconSet: IconSet) {
     });
 
     // Light/Dark theme button
-    const themeToggleButton = document.getElementById(
-        "theme-button"
-    ) as HTMLButtonElement;
+    const themeToggleButton = document.getElementById("theme-button") as HTMLButtonElement;
     themeToggleButton.replaceChildren(ctx.iconUI.theme.toHTMLElement());
     themeToggleButton.addEventListener("click", () => {
         // apply theme without search results as it is much faster

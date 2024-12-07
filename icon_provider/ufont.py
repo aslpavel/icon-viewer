@@ -10,7 +10,8 @@ import sys
 import math
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Protocol, Iterator
+from typing import Any, NamedTuple, Protocol
+from collections.abc import Callable, Iterator
 
 
 class OutlineBuilder(Protocol):
@@ -67,7 +68,7 @@ class BBoxBuilder:
             self.max.y = p.y
 
     def move_to(self, p: Point) -> None:
-        pass
+        self._extend(p)
 
     def line_to(self, p: Point) -> None:
         self._extend(p)
@@ -96,14 +97,14 @@ class SVGOutlineBuilder:
         self._relative = relative
         self._precision = precision
         self._tr = tr or Transform.identity()
-        self._point_prev: Point = Point(0, 0)
+        self._point_prev: Point | None = None
 
     def __str__(self) -> str:
         return self._file.getvalue()
 
     def _write_point(self, p: Point, sep: bool) -> Point:
         p = self._tr(p)
-        pp = p - self._point_prev if self._relative else p
+        pp = p - self._point_prev if self._relative and self._point_prev else p
 
         x = round(pp.x, self._precision)
         y = round(pp.y, self._precision)
@@ -117,7 +118,7 @@ class SVGOutlineBuilder:
         return p
 
     def move_to(self, p: Point) -> None:
-        self._file.write("m" if self._relative else "M")
+        self._file.write("m" if self._relative and self._point_prev else "M")
         self._point_prev = self._write_point(p, False)
 
     def line_to(self, p: Point) -> None:
@@ -233,7 +234,7 @@ class Transform(NamedTuple):
 
 class GlyphPoint(NamedTuple):
     coord: Point  # coordinate of the point
-    on_curve: bool  # point in on the curve
+    on_curve: bool  # point on the curve
     last: bool  # last point in the contour
 
 
@@ -270,13 +271,13 @@ class Glyph:
         self,
         relative: bool = False,
         tr: Transform | None = None,
-    ) -> str:
+    ) -> tuple[str, tuple[Point, Point] | None]:
         """Generate 100x100 SVG path for the glyph"""
 
         # move middle of the bbox to the middle of em box
         bbox = self.bbox()
         if bbox is None:
-            return ""
+            return "", None
         mid = (bbox[0] + bbox[1]) * 0.5
         em = max(
             self.font.head.units_per_em,
@@ -291,7 +292,9 @@ class Glyph:
             .scale(100 / em, 100 / em)
             .translate(center.x, center.y)
         )
-        return str(self.build_outline(SVGOutlineBuilder(relative=relative, tr=tr)))
+
+        builder = self.build_outline(SVGOutlineBuilder(relative=relative, tr=tr))
+        return str(builder), bbox
 
     def build_outline[OB: OutlineBuilder](
         self,
@@ -645,6 +648,7 @@ class Font:
         size: int | None = None,
         columns: int | None = None,
         padding: int | None = None,
+        relative: bool = True,
     ) -> str:
         """Generate SVG path specimen of all glyphs"""
         size = size or SPECIMEN_SIZE
@@ -656,24 +660,33 @@ class Font:
             return ""
 
         buf = io.StringIO()
-        buf.write("M0,0h1v1h-1z")  # mark top-left corner
+        buf.write("M0,0h1v1h-1z\n")  # mark top-left corner
         scale = size / 100
         size += padding
         row, col = 0, 0
-        glyphs = filter(lambda glyph: glyph.contours_count != 0, glyph_table.glyphs)
-        for index, glyph in enumerate(glyphs):
+        index = 0
+        for glyph in glyph_table.glyphs:
+            if glyph.contours_count == 0:
+                continue
             row, col = divmod(index, columns)
             tr = (
                 Transform.identity()
                 .translate(padding + col * size, padding + row * size)
                 .scale(scale, scale)
             )
-            buf.write(glyph.to_svg_path(tr=tr))
+            svg_path, bbox = glyph.to_svg_path(tr=tr, relative=relative)
+            if bbox is None:
+                continue
+            bbox_size = bbox[1] - bbox[0]
+            if bbox_size.x == 0 or bbox_size.y == 0:
+                continue
+            buf.write(svg_path)
             buf.write("\n")
+            index += 1
         # mark bottom-right corner
         mark_x = padding + columns * size
         mark_y = padding + (row + 1) * size
-        buf.write(f"M{mark_x},{mark_y}h1v1h-1z")
+        buf.write(f"M{mark_x},{mark_y}h1v1h-1z\n")
         return buf.getvalue()
 
     def glyph_by_codepoint(self, codepoint: int) -> Glyph | None:
@@ -959,7 +972,7 @@ class Font:
         }
         return PostTable(glyph_id_to_name)
 
-    @cached_table("parse")
+    @cached_table("name")
     def parse_name(self) -> NameTable:
         """Naming table (required)
 
@@ -1234,9 +1247,10 @@ def main() -> None:
             sys.stderr.write(f"Font does not have codepoint: {codepoint}\n")
             return
 
+        glyph_svg_path, _bbox = glyph.to_svg_path()
         match opts.format:
             case "path":
-                print(glyph.to_svg_path())
+                print(glyph_svg_path)
             case "json":
                 cmap = font.parse_cmap()
                 post = font.parse_post()
@@ -1253,7 +1267,7 @@ def main() -> None:
                         glyph.max_point.x,
                         glyph.max_point.y,
                     ),
-                    "path": glyph.to_svg_path(),
+                    "path": glyph_svg_path,
                 }
                 print(json.dumps(glyph_dict, indent=2))
             case format:
